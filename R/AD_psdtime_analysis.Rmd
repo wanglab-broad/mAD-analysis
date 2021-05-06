@@ -1,0 +1,243 @@
+---
+title: "AD_pseudotime_analysis"
+author: "Haowen Zhou"
+date: "4/23/2021"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Data
+
+
+```{r load}
+
+setwd("~/Desktop/At_Broad/AD")
+
+source("RScript/AD_FunctionDefinition.R")
+#Load Scaled Data
+ad_ini()
+starmap <- LoadH5Seurat("data/2020-12-27-starmap-mAD-scaled.h5seurat")
+starmap_raw <- LoadH5Seurat("data/2020-12-27-starmap-mAD-raw.h5seurat")
+starmap_64 <- LoadH5Seurat("data/2021-04-22-starmap-mAD-64-genes-raw.h5seurat")
+colnames(starmap_64@meta.data)[19] <- "cell_type"
+
+
+```
+
+
+## Get Pseudotime for Micro/Astro/Oligo&OPC/CA1/DG
+
+```{r psdtime calc}
+#Use Filtered data!
+
+psdtime_res_list <- list()
+psdtime_res_list[["Micro"]] <- psdtime_analysis(starmap_raw, "Micro", 
+                             level = "top_level",
+                             test = F,
+                             umap_min_dist = 0.5,
+                             euclidean_dist_ratio = 0.5,
+                             geodesic_dist_ratio = 2/3,
+                             min_branch_len = 10)
+psdtime_res_list[["Astro"]] <- psdtime_analysis(starmap_raw, "Astro", 
+                             level = "top_level",
+                             test = F,
+                             umap_min_dist = 1.25,
+                             euclidean_dist_ratio = 0.5,
+                             geodesic_dist_ratio = 2/3,
+                             min_branch_len = 6)
+psdtime_res_list[["Oligo"]] <- psdtime_analysis(starmap_raw, c("Oligo","OPC"), 
+                             level = "top_level",
+                             test = F,
+                             umap_min_dist = 1.25,
+                             euclidean_dist_ratio = 0.5,
+                             geodesic_dist_ratio = 2/3,
+                             min_branch_len = 6)
+psdtime_res_list[["Oligo"]]$cell_meta$cell_type[psdtime_res_list[["Oligo"]]$cell_meta$cell_type == "OPC_Gpr17"] <- "OPC"
+
+
+#Highlight cells with graph
+ad_psdtime_highlight <- function(meta_df, highlight_col, cds = NULL, show_trajectory_graph = F, title){
+  plot_list <- list()
+    if (show_trajectory_graph) {
+    ica_space_df <- t(cds@principal_graph_aux[["UMAP"]]$dp_mst) %>% 
+      as.data.frame() %>% dplyr::select_(prin_graph_dim_1 = 1, 
+                                         prin_graph_dim_2 = 2) %>% dplyr::mutate(sample_name = rownames(.), 
+                                                                                 sample_state = rownames(.))
+    dp_mst <- cds@principal_graph[["UMAP"]]
+    edge_df <- dp_mst %>% igraph::as_data_frame() %>% 
+      dplyr::select_(source = "from",target = "to") %>% 
+      dplyr::left_join(ica_space_df %>%
+                         dplyr::select_(source = "sample_name", source_prin_graph_dim_1 = "prin_graph_dim_1", source_prin_graph_dim_2 = "prin_graph_dim_2"), 
+                                                                                                         by = "source") %>% 
+      dplyr::left_join(ica_space_df %>% dplyr::select_(target = "sample_name", 
+                                                       target_prin_graph_dim_1 = "prin_graph_dim_1", 
+                                                       target_prin_graph_dim_2 = "prin_graph_dim_2"), 
+                       by = "target")
+    }
+  meta_df[["pseudotime"]] <- meta_df[["pseudotime"]]/max(meta_df[["pseudotime"]])
+  for(i in levels(droplevels(meta_df[[highlight_col]]))){
+    plot_list[[i]] <- ggplot() +
+      theme(line = element_blank(),
+        text = element_blank(),
+        title = element_blank(),
+        panel.background = element_blank(),
+        legend.position = "none") +
+      geom_point(data = meta_df[meta_df[[highlight_col]] != i,], 
+                 aes(x = UMAP1, y = UMAP2), colour = "gray",alpha = 0.8) +
+      geom_point(data = meta_df[meta_df[[highlight_col]] == i,], shape = 16, 
+                 aes(x = UMAP1, y = UMAP2), colour = cell_type_palette_list[[title]][[which(cell_type_list[[title]] == i)]]) +#colour = pseudotime
+      #scale_color_gradientn(colours = c("#7703fc", "#8403fc", "#be03fc", "#fc6b03", "#fceb03"),
+      #                      values = c(0, 0.2, 0.4, 0.6, 0.8, 1)) +
+      labs(title = paste(i,title,"Pseudotime"))
+    if(show_trajectory_graph){
+      mst_root_nodes <- cds@principal_graph_aux@listData[["UMAP"]][["root_pr_nodes"]]
+      root_df <- ica_space_df[mst_root_nodes,]
+     
+      plot_list[[i]] <- plot_list[[i]] + geom_segment(aes_string(x = "source_prin_graph_dim_1", 
+                                     y = "source_prin_graph_dim_2", xend = "target_prin_graph_dim_1", 
+                                     yend = "target_prin_graph_dim_2"), size = 1.0, 
+                          color = "gray28", linetype = "solid", 
+                          na.rm = TRUE, data = edge_df) + 
+        geom_point(aes_string(x = "prin_graph_dim_1", y = "prin_graph_dim_2"), shape = 21, stroke = 0.75, 
+                          color = "black", fill = "white", size = 2 * 1.5, na.rm = TRUE, root_df) + 
+        geom_text(aes_string(x = "prin_graph_dim_1", y = "prin_graph_dim_2", label = "1"), size = 2, 
+                  color = "black", na.rm = TRUE, root_df)
+    }
+  }
+  
+  return(plot_list)
+}
+pdf(file = "Pseudotime_trajectory.pdf",width = 6,height = 4.5,useDingbats = FALSE)
+plot_list <- ad_psdtime_highlight(psdtime_res_list[["Micro"]][["cell_meta"]], "sample", psdtime_res_list[["Micro"]][["cds"]], T, "Micro")
+#ggarrange(plotlist = plot_list,ncol = 2,nrow = 2) %>% print()
+plot_list %>% print()
+plot_list <- ad_psdtime_highlight(psdtime_res_list[["Astro"]][["cell_meta"]], "sample", psdtime_res_list[["Astro"]][["cds"]], T, "Astro")
+#ggarrange(plotlist = plot_list,ncol = 2,nrow = 2) %>% print()
+plot_list %>% print()
+plot_list <- ad_psdtime_highlight(psdtime_res_list[["Oligo"]][["cell_meta"]], "cell_type", psdtime_res_list[["Oligo"]][["cds"]], T, "Oligo")
+
+dev.off()
+#Figure 3 Export
+pdf(file = "Fig3_segments_Astro.pdf",width = 6,height = 4.5,useDingbats = FALSE)
+psdtime_res_list[["Astro"]][["Plot_list"]][["pseudotime"]]  +
+      theme(line = element_blank(),
+        text = element_blank(),
+        title = element_blank(),
+        panel.background = element_blank(),
+        legend.position = "none") + 
+  scale_color_gradientn(colours = c("#7703fc", "#8403fc", "#be03fc", "#fc6b03", "#fceb03"),
+                        values = c(0, 0.2, 0.4, 0.6, 0.8, 1))%>% print()
+plot_cells(psdtime_res_list[["Astro"]][["cds"]],
+            color_cells_by = "cell_type",
+            label_groups_by_cluster=FALSE,
+            label_leaves=FALSE,
+            label_branch_points=FALSE,
+            group_label_size=0,
+            cell_size = 1.2) +
+      theme(line = element_blank(),
+        text = element_blank(),
+        title = element_blank(),
+        panel.background = element_blank(),
+        legend.position = "none") +
+  scale_color_manual(values = cell_type_palette_list[["Astro"]]) %>% print()
+plot_list <- ad_psdtime_highlight(psdtime_res_list[["Astro"]][["cell_meta"]], "cell_type", psdtime_res_list[["Astro"]][["cds"]], T, "Astro")
+plot_list %>% print()
+#Micro c("CALM1","P2RY12","GPR34","TGFBR1","CST7","CTSB","APOE","CD9","TREM2","C1QA","CLEC7A","CTSL","CD83","CTSS")
+#OPC/Oligo c("PLP1","MBP","CLDN11","KLK6","SERPINA3N","C4B","CDKN1A","PDGFRA","CACNG4","GPR17","SERPINA3N")
+#Astro c("ALDOC","CST3","GFAP","VIM","AQP4","CD63")
+pdf(file = "Oligo-OPC_MatrixPlot.pdf",width = 6,height = 4.5,useDingbats = FALSE)
+ad_plot_matrix_w_64(c("Oligo"),
+                    c("PLP1","PDGFRA","CACNG4","GPR17","CLDN11","KLK6","SERPINA3N","C4B","CDKN1A","CD9"),
+                    "Oligo heatmap","row-scale") %>% print()
+ad_plot_matrix_w_64(c("OPC"),
+                    c("PDGFRA","CACNG4","GPR17","SERPINA3N","C4B"),
+                    "OPC heatmap","row-scale") %>% print()
+dev.off()
+
+
+
+
+
+
+
+```
+
+```{r graph_test}
+Micro_graph_test_res <- graph_test(psdtime_res_list[["Micro"]][["cds"]], neighbor_graph="knn", cores=4) %>% arrange(q_value)
+tmp_cds <- psdtime_res_list[["Micro"]][["cds"]][which(rowData(psdtime_res_list[["Micro"]][["cds"]])$gene_short_name %in% Micro_graph_test_res$gene_short_name[1:10]),]
+
+Astro_graph_test_res <- graph_test(psdtime_res_list[["Astro"]][["cds"]], neighbor_graph="knn", cores=4) %>% arrange(q_value)
+tmp_cds <- psdtime_res_list[["Astro"]][["cds"]][which(rowData(psdtime_res_list[["Astro"]][["cds"]])$gene_short_name %in% Astro_graph_test_res$gene_short_name[1:10]),]
+
+Oligo_graph_test_res <- graph_test(psdtime_res_list[["Astro"]][["cds"]], neighbor_graph="knn", cores=4) %>% arrange(q_value)
+tmp_cds <- psdtime_res_list[["Oligo"]][["cds"]][c("PLP1","PDGFRA","CACNG4","GPR17","CLDN11","KLK6","C4B","CDKN1A","CD9"),]
+
+plot_genes_in_pseudotime(tmp_cds,ncol = 2,
+                         color_cells_by = "cell_type")
+plot_cells(psdtime_res_list[["Oligo"]][["cds"]],
+           genes=c("PLP1","CLDN11","KLK6","C4B"),
+           label_cell_groups=FALSE,
+           show_trajectory_graph=FALSE,
+           cell_size = 0.6)
+#Oligo Highlight c("PLP1","CLDN11","KLK6","C4B") +cells with psdtime colorcode
+ad_psdtime_gene_highlight <- function(meta_df,cds,gene_list){
+  plot_list <- list()
+  meta_df[["pseudotime"]] <- meta_df[["pseudotime"]]/max(meta_df[["pseudotime"]])
+  for(i in gene_list){
+    plot_list[[i]] <- ggplot() +
+      theme(line = element_blank(),
+        panel.background = element_blank(),
+        legend.position = "none") +
+      geom_point(data = meta_df[cds@assays@data@listData[["counts"]][i,] == 0,], 
+                 aes(x = UMAP1, y = UMAP2), colour = "gray",alpha = 0.8) +
+      geom_point(data = meta_df[cds@assays@data@listData[["counts"]][i,] != 0,], shape = 16, 
+                 aes(x = UMAP1, y = UMAP2,  colour = pseudotime)) +
+      scale_color_gradientn(colours = c("#7703fc", "#8403fc", "#be03fc", "#fc6b03", "#fceb03"),
+                            values = c(0, 0.2, 0.4, 0.6, 0.8, 1)) +
+
+      labs(title = paste(i,"Pseudotime"))
+  }
+  return(plot_list)
+}
+plot_list <- ad_psdtime_gene_highlight(psdtime_res_list[["Oligo"]][["cell_meta"]],
+                                       psdtime_res_list[["Oligo"]][["cds"]],
+                                       c("PLP1","CLDN11","KLK6","C4B")) %>% print()
+
+
+```
+```{r Export}
+pdf(file = "F4_Astro_expr.pdf",width = 6,height = 4.5,useDingbats = FALSE)
+for (i in c("ALDOC","CST3","GFAP","VIM","AQP4","CD63")) {
+  tmp_plot <- plot_cells(psdtime_res_list[["Astro"]][["cds"]],
+           genes = i,
+           label_cell_groups=FALSE,
+           show_trajectory_graph=T,
+           cell_size = 1.0,
+           label_branch_points = F,label_leaves = F) + 
+    scale_color_viridis(na.value = "grey90",direction = -1)
+  print(tmp_plot)
+}
+dev.off()
+
+DG_DC_DE <- DG_DC_DE %>% .[.$p_val_adj < 0.05,] %>% arrange(desc(abs(avg_logFC)))
+pdf(file = "F6_DG_expr.pdf",width = 6,height = 4.5,useDingbats = FALSE)
+for (i in DG_DC_DE$rowname[1:10]) {
+  tmp_plot <- plot_cells(psdtime_res_list[["DG"]][["cds"]],
+           genes = i,
+           label_cell_groups=FALSE,
+           show_trajectory_graph=T,
+           cell_size = 1.0,
+           label_branch_points = F,label_leaves = F) + 
+    scale_color_viridis(na.value = "grey90",direction = -1)
+  print(tmp_plot)
+}
+dev.off()
+
+```
+
+
+

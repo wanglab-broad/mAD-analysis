@@ -1,0 +1,782 @@
+---
+title: "AD_Apr12"
+author: "Haowen Zhou"
+date: "4/12/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Data
+
+
+```{r load}
+
+setwd("~/Desktop/At_Broad/AD")
+#Convert Data
+#Convert("data/2021-04-22-starmap-mAD-64-genes-raw.h5ad", dest = "h5seurat", overwrite = TRUE)
+#Convert("data/2021-04-22-starmap-mAD-raw.h5ad", dest = "h5seurat", overwrite = TRUE)
+
+source("AD_FunctionDefinition.R")
+#Load Scaled Data
+ad_ini()
+starmap <- LoadH5Seurat("data/2020-12-27-starmap-mAD-scaled.h5seurat")
+starmap_raw <- LoadH5Seurat("data/2021-04-22-starmap-mAD-raw.h5seurat")
+
+starmap_64 <- LoadH5Seurat("data/2021-04-22-starmap-mAD-64-genes-raw.h5seurat")
+colnames(starmap_64@meta.data)[19] <- "cell_type"
+```
+
+
+```{r Prepare}
+#AD palette list
+top_level_palette_list <- as.character(unlist(starmap_raw@misc[["top_hex_dict"]]))[colnames(starmap_raw@misc[["top_hex_dict"]]) != "DG"]
+names(top_level_palette_list) <- colnames(starmap_raw@misc[["top_hex_dict"]])[colnames(starmap_raw@misc[["top_hex_dict"]]) != "DG"]
+#AD_64 palette list
+top_level_palette_list <- as.character(unlist(starmap_64@misc[["top_hex_dict"]]))
+names(top_level_palette_list) <- names(unlist(starmap_64@misc[["top_hex_dict"]]))
+top_level_palette_list <- c(top_level_palette_list[!names(top_level_palette_list) %in% c("DG","LHb")],"Mix" = "#8c8c8c")
+
+
+cell_type_list <- list("Ex" = c("L2/3" ,"L4/5_RSC_A","L4/5_RSC_B","L6"),
+                       "Micro" = c("Micro", "Micro_Gpr34", "Micro_Cst7/Ctsb"),
+                       "Oligo" = c("Oligo", "Oligo_Klk6", "Oligo_Cldn11","OPC"),
+                       "Astro" = c("Astro","Astro_Cst3","Astro_Gfap/Vim"),
+                       "OPC" = c("OPC","OPC_Gpr17"),
+                       "Inhi" = c("Inhi_Cnr1","Inhi_Lamp5","Inhi_Pvalb","Inhi_Sst"),
+                       "CADG" = c("CA1","CA2","CA3","DG"))
+cell_type_palette_list <- list("Ex" = c("#f4777c","#f8bf76" ,"#fdfe02","#b0ff00"),
+                    "Micro" = c("#0dd193","#7a9deb" ,"#fc8d62"),
+                    "Oligo" = c("#0dd193","#7a9deb" ,"#fc8d62","#8600d4"),
+                    "Astro" = c("#0dd193","#7a9deb" ,"#fc8d62"),
+                    "OPC" = c("#0dd193","#7a9deb"),
+                    "Inhi" = c("#3774f8","#43b500" ,"#bcaa03","#f19cd3"),
+                    "CADG" = c("#90fffe","#3b92ff" ,"#9600ff","#95000a"))
+```
+
+## Calc Plaque Border-Dist
+
+```{r calc border-dist}
+starmap <- ad_calc_plaque_dist(starmap,starmap@misc[["AD_mouse9494_morph"]], 400, "AD_mouse9494", top_level_palette_list, "all")
+starmap <- ad_calc_plaque_dist(starmap,starmap@misc[["AD_mouse9494_morph"]], 400, "AD_mouse9494", top_level_palette_list, "Cortex")
+starmap <- ad_calc_plaque_dist(starmap,starmap@misc[["AD_mouse9494_morph"]], 400, "AD_mouse9494", top_level_palette_list, "Sub-cortical")
+
+starmap <- ad_calc_plaque_dist(starmap,starmap@misc[["AD_mouse9723_morph"]], 400, "AD_mouse9723", top_level_palette_list, "all")
+starmap <- ad_calc_plaque_dist(starmap,starmap@misc[["AD_mouse9723_morph"]], 400, "AD_mouse9723", top_level_palette_list, "Cortex")
+starmap <- ad_calc_plaque_dist(starmap,starmap@misc[["AD_mouse9723_morph"]], 400, "AD_mouse9723", top_level_palette_list, "Sub-cortical")
+
+starmap_64 <- ad_calc_plaque_dist(starmap_64,starmap_64@misc[["AD_mouse9919_morph"]], 400, "AD_mouse9919", top_level_palette_list, "all")
+starmap_64 <- ad_calc_plaque_dist(starmap_64,starmap_64@misc[["AD_mouse9721_morph"]], 400, "AD_mouse9721", top_level_palette_list, "all")
+
+```
+##Plot cell type distribution
+```{r}
+#Running in console
+ad_distr_fig_export_regional(starmap, "AD_mouse9494",cell_type_list,cell_type_palette_list)
+ad_distr_fig_export_regional(starmap, "AD_mouse9723", cell_type_list,cell_type_palette_list, 
+                    scale_max = c("Micro"=1,"Astro"=0.25,"Oligo"=0.75, "Ex"=0.6,"Inhi"=0.15))
+
+ad_distr_fig_export_all(starmap_64, "AD_mouse9919", cell_type_list, cell_type_palette_list,
+                    scale_max = c("Micro"=0.75,"Astro"=0.2,"Oligo"=0.25, "Ex"=0.3,"Inhi"=0.1))
+ad_distr_fig_export_all(starmap_64, "AD_mouse9721", cell_type_list, cell_type_palette_list, 
+                    scale_max = c("Micro"=0.75,"Astro"=0.2,"Oligo"=0.25, "Ex"=0.3,"Inhi"=0.1))
+
+```
+
+## Gene Expression among min_dist
+
+```{r}
+AD9494_spatial <- ad_get_spatial_expr(starmap_raw,"AD_mouse9494",cell_meta = starmap@misc[["AD_mouse9494_plaque_all"]][["AD_mouse9494_cell_meta"]])
+AD9723_spatial <- ad_get_spatial_expr(starmap_raw,"AD_mouse9723",cell_meta = starmap@misc[["AD_mouse9723_plaque_all"]][["AD_mouse9723_cell_meta"]])
+
+
+#(R10+R20)/2 > MAX(R30-R100)
+apply(tmp_df,1,FUN = function(x){
+  vec <- as.numeric(x)
+  return((vec[1]+vec[2])/2 > max(vec[3:10]))
+})
+
+
+
+
+```
+
+
+```{r Micro}
+#psdtime heatmap function
+ad_plot_psdtime_heatmap <- function(psdtime_df, show_genes){
+  
+}
+AD_Micro_pseudotime <- psdtime_res_list[["Micro"]][["cell_meta"]]
+tmp <- starmap@meta.data[starmap@meta.data$top_level == "Micro",]
+AD_Micro_pseudotime <- data.frame(AD_Micro_pseudotime,
+                                  normalized_psdtime = AD_Micro_pseudotime$pseudotime/max(AD_Micro_pseudotime$pseudotime))
+AD_Micro_pseudotime <- data.frame(AD_Micro_pseudotime,
+                                  psdtime_stage = floor(10 * AD_Micro_pseudotime$normalized_psdtime))
+AD_Micro_pseudotime$psdtime_stage[AD_Micro_pseudotime$psdtime_stage == 10] <- 9
+
+
+gene_list <- row.names(starmap_obj@assays[["RNA"]]@counts)[
+    rowSums(starmap_obj@assays[["RNA"]]@counts[,starmap_obj@meta.data[["top_level"]] == "Micro"] > 0)
+    > sum(starmap_obj@meta.data[["top_level"]] == "Micro") * 0.1]
+tmp_df <- matrix(0, nrow = length(gene_list), ncol = 10) %>% as.data.frame(row.names = gene_list)
+colnames(tmp_df) <- paste("stage",0:9,sep = "")
+for (i in 0:9) {
+    tmp_mat <- starmap_obj@assays[["RNA"]]@counts[gene_list,starmap_obj@meta.data[["top_level"]] == "Micro"]
+    tmp_df[,i+1] <- rowSums(tmp_mat[,AD_Micro_pseudotime$psdtime_stage == i]) /
+      sum(AD_Micro_pseudotime$psdtime_stage == i)
+  }
+Heatmap(log2(1+as.matrix(tmp_df[c("CTSS","P2RY12","GPR34","TGFBR1","CST7","CTSB","APOE","CD9","TREM2"),])),cluster_columns = F, show_row_names = F ) 
+
+
+#Plot psdtime vs distance
+ad_plot_psdtime_distr <- function(cell_meta, psdtime_res, sample, cell_type){
+  tmp_df <- cell_meta %>% 
+  .[.$top_level %in% cell_type,] %>%
+  data.frame(dist_group = pmin(floor(.$min_border_dist/33),5),
+             pseudotime = psdtime_res[psdtime_res$sample == sample & psdtime_res$top_level %in% cell_type,c("pseudotime")])
+  tmp_df$pseudotime <- tmp_df$pseudotime/max(tmp_df$pseudotime)
+  tmp_df <- tmp_df %>% mutate(dist_group = "mean") %>% 
+    rbind(subset(tmp_df,dist_group < 5)) %>%
+    mutate(dist_group = as.factor(dist_group))
+  levels(tmp_df$dist_group) <- c(paste(1:5,"0um",sep = ""),"mean")
+
+  tmp_df %>% ggplot( aes(x=dist_group, y=pseudotime, fill=dist_group)) +
+      geom_boxplot() +
+      #scale_fill_viridis(discrete = TRUE, alpha=0.6) +
+      #geom_jitter(color="black", size=0.4, alpha=0.9) +
+      theme_bw() +
+      theme(
+        legend.position="none",
+        panel.background = element_blank(),
+        plot.title = element_text(size=11)
+      ) + 
+    scale_fill_manual(values= colorRamp(c("#7703fc", "#8403fc", "#be03fc", "#fc6b03", "#fceb03"),space = "rgb")#Based on mean value of each group to assign a color
+                      (aggregate(.~ dist_group, tmp_df[,13:14], mean)$pseudotime) %>% `/`(255) %>% rgb()) +
+      ggtitle(paste(sample,"Pseudotime Distribution",cell_type)) +
+      xlab("")
+}
+```
+
+```{r Export psdtime related figures}
+ad_plot_psdtime_group <- function(data,x,fill,title,subcortical = F){
+  if(subcortical){
+    data$region[data$region %in% c("Hippocampus","White Matter")] <- "Sub-cortical"
+  }
+  data %>% ggplot( aes_string(x = x, y="normalized_psdtime", fill=fill)) +
+    geom_boxplot() +
+    scale_fill_viridis(discrete = TRUE, alpha=0.6) +
+    #geom_jitter(color="black", size=0.4, alpha=0.9) +
+    theme_bw() +
+    theme(
+      
+      plot.title = element_text(size=11)
+    ) +
+    ggtitle(paste("Pseudotime Distribution",title)) +
+    xlab("") %>% print()
+}
+
+
+ad_plot_psdtime_distr(starmap@misc[["AD_mouse9494_plaque_all"]][["AD_mouse9494_cell_meta"]], 
+                      psdtime_res_list[["Micro"]][["cell_meta"]],
+                      "AD_mouse9494",
+                      "Micro") %>% print()
+ad_plot_psdtime_distr(starmap@misc[["AD_mouse9723_plaque_all"]][["AD_mouse9723_cell_meta"]], 
+                      psdtime_res_list[["Micro"]][["cell_meta"]],
+                      "AD_mouse9723",
+                      "Micro") %>% print()
+
+ad_plot_psdtime_distr(starmap@misc[["AD_mouse9494_plaque_all"]][["AD_mouse9494_cell_meta"]], 
+                      psdtime_res_list[["Astro"]][["cell_meta"]],
+                      "AD_mouse9494",
+                      "Astro") %>% print()
+ad_plot_psdtime_distr(starmap@misc[["AD_mouse9723_plaque_all"]][["AD_mouse9723_cell_meta"]], 
+                      psdtime_res_list[["Astro"]][["cell_meta"]],
+                      "AD_mouse9723",
+                      "Astro") %>% print()
+pdf(file = "Pseudotime_boxplot_Oligo-OPC.pdf",width = 12,height = 9)
+ad_plot_psdtime_distr(starmap@misc[["AD_mouse9494_plaque_all"]][["AD_mouse9494_cell_meta"]], 
+                      psdtime_res_list[["Oligo"]][["cell_meta"]],
+                      "AD_mouse9494",
+                      c("OPC")) %>% print()
+ad_plot_psdtime_distr(starmap@misc[["AD_mouse9494_plaque_all"]][["AD_mouse9494_cell_meta"]], 
+                      psdtime_res_list[["Oligo"]][["cell_meta"]],
+                      "AD_mouse9494",
+                      c("Oligo")) %>% print()
+ad_plot_psdtime_distr(starmap@misc[["AD_mouse9723_plaque_all"]][["AD_mouse9723_cell_meta"]], 
+                      psdtime_res_list[["Oligo"]][["cell_meta"]],
+                      "AD_mouse9723",
+                      c("OPC")) %>% print()
+ad_plot_psdtime_distr(starmap@misc[["AD_mouse9723_plaque_all"]][["AD_mouse9723_cell_meta"]], 
+                      psdtime_res_list[["Oligo"]][["cell_meta"]],
+                      "AD_mouse9723",
+                      c("Oligo")) %>% print()
+dev.off()
+
+
+
+AD_Astro_pseudotime %>% ad_plot_psdtime_group(x = "region", fill = "group", title = "Astro", subcortical = T)
+AD_Micro_pseudotime %>% ad_plot_psdtime_group(x = "region", fill = "group", title = "Micro", subcortical = T)
+AD_OPC_Oligo_pseudotime %>% ad_plot_psdtime_group(x = "region", fill = "group", title = "Oligo/OPC", subcortical = T)
+
+
+
+
+AD_OPC_Oligo_pseudotime %>% ggplot( aes(x=region, y=normalized_psdtime, fill=group)) +
+    geom_boxplot() +
+    scale_fill_viridis(discrete = TRUE, alpha=0.6) +
+    #geom_jitter(color="black", size=0.4, alpha=0.9) +
+    theme_bw() +
+    theme(
+      
+      plot.title = element_text(size=11)
+    ) +
+    ggtitle(paste("Pseudotime Distribution")) +
+    xlab("") %>% print()
+```
+
+```{r Astro}
+#psdtime heatmap
+AD_Astro_pseudotime <- read_csv("Export_csv/AD_Astro_pseudotime.csv")
+tmp <- starmap@meta.data[starmap@meta.data$top_level == "Astro",]
+AD_Astro_pseudotime <- data.frame(AD_Astro_pseudotime,
+                                  normalized_psdtime = AD_Astro_pseudotime$pseudotime/max(AD_Astro_pseudotime$pseudotime))
+AD_Astro_pseudotime <- data.frame(AD_Astro_pseudotime,
+                                  psdtime_stage = floor(10 * AD_Astro_pseudotime$normalized_psdtime))
+AD_Astro_pseudotime$psdtime_stage[AD_Astro_pseudotime$psdtime_stage == 10] <- 9
+
+gene_list <- row.names(starmap_obj@assays[["RNA"]]@counts)[
+    rowSums(starmap_obj@assays[["RNA"]]@counts[,starmap_obj@meta.data[["top_level"]] == "Astro"] > 0)
+    > sum(starmap_obj@meta.data[["top_level"]] == "Astro") * 0.1]
+tmp_df <- matrix(0, nrow = length(gene_list), ncol = 10) %>% as.data.frame(row.names = gene_list)
+colnames(tmp_df) <- paste("stage",0:9,sep = "")
+for (i in 0:9) {
+    tmp_mat <- starmap_obj@assays[["RNA"]]@counts[gene_list,starmap_obj@meta.data[["top_level"]] == "Astro"]
+    tmp_df[,i+1] <- rowSums(tmp_mat[,AD_Astro_pseudotime$psdtime_stage == i]) /
+      sum(AD_Astro_pseudotime$psdtime_stage == i)
+  }
+Heatmap(log2(1+as.matrix(tmp_df[c("ALDOC","CST3","GFAP","VIM","AQP4","CD63"),])),cluster_columns = F, show_row_names = T ) 
+#Scale
+Heatmap(t(scale(t(as.matrix(tmp_df[c("ALDOC","CST3","GFAP","VIM","AQP4","CD63"),])))),cluster_columns = F, show_row_names = T ) 
+
+
+```
+
+```{r OPC_Oligo}
+#psdtime heatmap
+AD_OPC_Oligo_pseudotime <- read_csv("AD_OPC_Oligo_pseudotime.csv")
+tmp <- starmap@meta.data[starmap@meta.data$top_level %in% c("OPC","Oligo"),]
+AD_OPC_Oligo_pseudotime <- data.frame(AD_OPC_Oligo_pseudotime,
+                                  normalized_psdtime = AD_OPC_Oligo_pseudotime$pseudotime/max(AD_OPC_Oligo_pseudotime$pseudotime))
+AD_OPC_Oligo_pseudotime <- data.frame(AD_OPC_Oligo_pseudotime,
+                                  psdtime_stage = floor(10 * AD_OPC_Oligo_pseudotime$normalized_psdtime))
+AD_OPC_Oligo_pseudotime$psdtime_stage[AD_OPC_Oligo_pseudotime$psdtime_stage == 10] <- 9
+
+gene_list <- row.names(starmap_obj@assays[["RNA"]]@counts)[
+    rowSums(starmap_obj@assays[["RNA"]]@counts[,starmap_obj@meta.data[["top_level"]] %in% c("OPC","Oligo")] > 0)
+    > sum(starmap_obj@meta.data[["top_level"]] %in% c("OPC","Oligo")) * 0.01]
+tmp_df <- matrix(0, nrow = length(gene_list), ncol = 10) %>% as.data.frame(row.names = gene_list)
+colnames(tmp_df) <- paste("stage",0:9,sep = "")
+for (i in 0:9) {
+    tmp_mat <- starmap_obj@assays[["RNA"]]@counts[gene_list,starmap_obj@meta.data[["top_level"]] %in% c("OPC","Oligo")]
+    tmp_df[,i+1] <- rowSums(tmp_mat[,AD_OPC_Oligo_pseudotime$psdtime_stage == i]) /
+      sum(AD_OPC_Oligo_pseudotime$psdtime_stage == i)
+  }
+Heatmap(log2(1+as.matrix(tmp_df[intersect(c("PLP1","MBP","CLDN11","KLK6","SERPINA3N","C4B","CDKN1A","PDGFRA","CACNG4","GPR17"),gene_list),])),
+        cluster_columns = F, show_row_names = T ) 
+
+```
+            | 8 D| 8 C|13 D|13 C|
+2766 dataset|9723|9735|9494|9498|
+64   dataset|9721|9781|9919|9930|
+
+
+```{r DE analysis}
+#Median Scaling
+#Divided by median
+ad_starmap_normalize <- function(starmap_obj){
+  starmap_scaled <- starmap_obj
+  median_vec <- rep(0,length(levels(starmap_scaled@meta.data[["sample"]])))
+  names(median_vec) <- levels(starmap_scaled@meta.data[["sample"]])
+  for(i in levels(starmap_scaled@meta.data[["sample"]])){
+    median_vec[[i]] <- median(starmap_scaled@meta.data[["n_counts"]][starmap_scaled@meta.data[["sample"]] == i])
+  }
+
+  scale_factor <- mean(median_vec)
+  
+  for(i in levels(starmap_scaled@meta.data[["sample"]])){
+    starmap_scaled@assays[["RNA"]]@data[,starmap_scaled@meta.data[["sample"]] == i] <- 
+      log2(scale_factor*starmap_scaled@assays[["RNA"]]@data[,starmap_scaled@meta.data[["sample"]] == i]/
+      median(starmap_scaled@meta.data[["n_counts"]][starmap_scaled@meta.data[["sample"]] == i])+1)
+  }
+  starmap_scaled@misc <- list()
+  return(starmap_scaled)
+}
+
+starmap_scaled <- ad_starmap_normalize(starmap_raw)
+#starmap_64 <- ad_starmap_normalize(starmap_64)
+#starmap_raw <- ad_starmap_normalize(starmap_raw)
+#diet seurat
+starmap_scaled@misc <- list("AD_mouse9494_plaque_all" = starmap@misc$AD_mouse9494_plaque_all,
+                            "AD_mouse9723_plaque_all" = starmap@misc$AD_mouse9723_plaque_all)
+
+Micro_DC_DE <- ad_D_vs_C_DE(starmap_scaled,"Micro",c("13_months","8_months"))
+Astro_DC_DE <- ad_D_vs_C_DE(starmap_scaled,"Astro",c("13_months","8_months"))
+Oligo_DC_DE <- ad_D_vs_C_DE(starmap_scaled,"Oligo",c("13_months","8_months"))
+Exc_DC_DE <- ad_D_vs_C_DE(starmap_scaled,c("Ex","CA1","CA2","CA3","DG"),c("13_months","8_months"))
+Inhi_DC_DE <- ad_D_vs_C_DE(starmap_scaled,"Inhi",c("13_months","8_months"))
+
+CA1_DC_DE <- ad_D_vs_C_DE(starmap_scaled,"CA1",c("13_months"))
+DG_DC_DE <- ad_D_vs_C_DE(starmap_scaled,"DG",c("13_months"))
+#Get Spatial DE genes
+AD9494_DE <- ad_spatial_DE(starmap_scaled,"AD_mouse9494",top_level = "all") %>% .[.$p_val_adj < 0.05,]
+AD9723_DE <- ad_spatial_DE(starmap_scaled,"AD_mouse9723",top_level = "all") %>% .[.$p_val_adj < 0.05,]
+
+
+AD9494_SpatialDE_list <- ad_get_spatial_expr(starmap_scaled,"AD_mouse9494",
+                                             cell_meta = starmap_scaled@misc$AD_mouse9494_plaque_all$AD_mouse9494_cell_meta,
+                                             gene_list = row.names(AD9494_DE),logfc = AD9494_DE$avg_logFC,logfc_cutoff = 0.1)
+AD9723_SpatialDE_list <- ad_get_spatial_expr(starmap_scaled,"AD_mouse9723",
+                                             cell_meta = starmap_scaled@misc$AD_mouse9723_plaque_all$AD_mouse9723_cell_meta,
+                                             gene_list = row.names(AD9723_DE),logfc = AD9723_DE$avg_logFC,logfc_cutoff = 0.1)
+pdf(file = "F7_spatial_DE.pdf",width = 12,height = 9)
+print(AD9494_SpatialDE_list$scaled_he_heatmap)
+print(AD9723_SpatialDE_list$scaled_he_heatmap)
+dev.off()
+write.csv(AD9494_DE,file = "AD9494_spatialDE.csv")
+write.csv(AD9723_DE,file = "AD9723_spatialDE.csv")
+#Plot Matrix Plot
+
+ad_plot_matrix <- function(starmap_obj, cell_type, gene_list, col_title,scale = "log", cluster_rows = T){
+  tmp_df <- matrix(0, nrow = length(gene_list), ncol = length(cell_type)) %>% as.data.frame(row.names = gene_list)
+  colnames(tmp_df) <- cell_type
+  for (i in cell_type) {
+      tmp_mat <- starmap_obj@assays[["RNA"]]@counts[gene_list,starmap_obj@meta.data[["cell_type"]] == i]
+      tmp_df[,i] <- rowSums(tmp_mat) / dim(tmp_mat)[2]
+  }
+  if(scale == "log") Heatmap(log10(1+tmp_df), cluster_rows = cluster_rows,
+                             cluster_columns = F, show_row_names = T, col = brewer.pal(5,"Reds"),
+                             column_title = paste(scale, col_title))
+  else if(scale == "row-scale") Heatmap(t(scale(t(as.matrix(tmp_df)))), cluster_rows = cluster_rows,
+                                    cluster_columns = F, show_row_names = T, column_title = paste(scale, col_title)) 
+  
+}
+
+all_samples <- c("AD_mouse9735","AD_mouse9723","AD_mouse9498","AD_mouse9494",
+                 "AD_mouse9781","AD_mouse9721","AD_mouse9930","AD_mouse9919")
+
+ad_plot_matrix_w_64 <- function(top_level, gene_list, col_title, scale = "log"){
+  #gene_list <- gene_list[gene_list %in% gene_list_64] %>% .[1:10] #Top 10 genes significant
+  tmp_df_2766 <- matrix(0, nrow = length(gene_list), ncol = 4) %>% as.data.frame(row.names = gene_list)
+  tmp_df_64   <- matrix(0, nrow = length(gene_list), ncol = 4) %>% as.data.frame(row.names = gene_list)
+  colnames(tmp_df_2766) <- c("AD_mouse9735","AD_mouse9723","AD_mouse9498","AD_mouse9494")
+  colnames(tmp_df_64)   <- c("AD_mouse9781","AD_mouse9721","AD_mouse9930","AD_mouse9919")
+  #"AD_mouse9735","AD_mouse9723",
+  #"AD_mouse9781","AD_mouse9721",
+
+  for (i in 1:4) {
+      tmp_mat <- starmap_raw@assays[["RNA"]]@data[gene_list,starmap_raw@meta.data[["top_level"]] %in% top_level & 
+                                                      starmap_raw@meta.data[["sample"]] == colnames(tmp_df_2766)[i]]
+      tmp_df_2766[,i] <- rowSums(tmp_mat) / dim(tmp_mat)[2]
+  }
+  for (i in 1:4) {
+      tmp_mat <- starmap_64@assays[["RNA"]]@data[gene_list,starmap_64@meta.data[["top_level"]] %in% top_level & 
+                                                      starmap_64@meta.data[["sample"]] == colnames(tmp_df_64)[i]]
+      tmp_df_64[,i] <- rowSums(tmp_mat) / dim(tmp_mat)[2]
+  }
+  plot_list <- list()
+  if(scale == "log"){
+    require(RColorBrewer)
+    plot_list[[1]] <- Heatmap(log10(1+as.matrix(tmp_df_2766)),col = brewer.pal(5,"Reds"),
+                              cluster_columns = F, cluster_rows = F, show_row_names = T, column_title = paste("2766_dataset",paste(top_level,collapse = "/"),col_title,scale))
+    plot_list[[2]] <-Heatmap(log10(1+as.matrix(tmp_df_64)),col = brewer.pal(5,"Reds"),
+                             cluster_columns = F, cluster_rows = F, show_row_names = T, column_title = paste("64_dataset",paste(top_level,collapse = "/"),col_title,scale))
+  }else if(scale == "row-scale"){
+    tmp_df_2766 <- cbind(t(scale(t(as.matrix(tmp_df_2766)))))
+    tmp_df_64   <- cbind(t(scale(t(as.matrix(tmp_df_64)))))
+    plot_list[[1]] <- Heatmap(tmp_df_2766,
+                              cluster_columns = F, cluster_rows = F, show_row_names = T, column_title = paste("2766_dataset",paste(top_level,collapse = "/"),col_title,scale))
+    plot_list[[2]] <- Heatmap(tmp_df_64,
+                              cluster_columns = F, cluster_rows = F, show_row_names = T, column_title = paste("64_dataset",paste(top_level,collapse = "/"),col_title,scale))
+  }
+  plot_list
+}
+
+pdf(file = "Matrix_plot_Micro.pdf",width = 12,height = 9)
+ad_plot_matrix(starmap,c("Micro","Micro_Gpr34","Micro_Cst7/Ctsb"),c("C1QA","CLEC7A","CTSL","CD83","CALM1","CTSS","P2RY12","GPR34","TGFBR1","CST7","CTSB","APOE","CD9","TREM2"),
+               "Micro Cell Marker","log",T)%>% print()
+ad_plot_matrix(starmap,c("Micro","Micro_Gpr34","Micro_Cst7/Ctsb"),c("C1QA","CLEC7A","CTSL","CD83","CALM1","CTSS","P2RY12","GPR34","TGFBR1","CST7","CTSB","APOE","CD9","TREM2"),
+               "Micro Cell Marker","row-scale",T)%>% print()
+dev.off()
+
+pdf(file = "Matrix_plot_Oligo.pdf",width = 12,height = 9)
+ad_plot_matrix(starmap,c("Oligo", "Oligo_Cldn11", "Oligo_Klk6"),  c("VSNL1", "ATP1A3", "GPM6A", "TSPAN7", "NRGN", "CLDN11", "MBP", "GFAP", "KCNJ2", "RCAN2", "KLK6", "TRF", "CNTN2", "SORT1", "APOD"),
+               "Oligoo Cell Marker","log",F)%>% print()
+ad_plot_matrix(starmap,c("Oligo", "Oligo_Cldn11", "Oligo_Klk6"),  c("VSNL1", "ATP1A3", "GPM6A", "TSPAN7", "NRGN", "CLDN11", "MBP", "GFAP", "KCNJ2", "RCAN2", "KLK6", "TRF", "CNTN2", "SORT1", "APOD"),
+               "Oligo Cell Marker","row-scale",F)%>% print()
+dev.off()
+
+pdf(file = "Matrix_plot_Astro.pdf",width = 12,height = 9)
+ad_plot_matrix(starmap,c("Astro","Astro_Cst3", "Astro_Gfap/Vim"),  c("ATP1A3", "VSNL1", "NRGN", "SNAP25", "RAB6B", "CST3", "TSPAN7", "HTRA1", "ID4", "APOE", "GFAP", "VIM", "FXYD1", "AQP4", "CD63"),
+               "Astro Cell Marker","log",F)%>% print()
+ad_plot_matrix(starmap,c("Astro","Astro_Cst3", "Astro_Gfap/Vim"),  c("ATP1A3", "VSNL1", "NRGN", "SNAP25", "RAB6B", "CST3", "TSPAN7", "HTRA1", "ID4", "APOE", "GFAP", "VIM", "FXYD1", "AQP4", "CD63"),
+               "Astro Cell Marker","row-scale",F)%>% print()
+dev.off()
+
+gene_list_64 <- c("SLC17A7","CUX2","TSHZ2","CPLX1","PCP4","PCDH9","GAD1","CNR1","LAMP5","PVALB","SST","VIP","NPY","GRIN2B","CAMK4","RPH3A","BRINP1","C1QL3","ALDOC","CST3","GFAP","VIM","AQP4","CD63","BSG","FLT1","CTSS","P2RY12","GPR34","TGFBR1","CST7","CTSB","APOE","CD9","TREM2","PLP1","MBP","CLDN11","KLK6","SERPINA3N","C4B","CDKN1A","PDGFRA","CACNG4","GPR17","MYH11","VTN","C1QA","CLEC7A","CTSL","CD83","CALM1","MYO5A","HTRA1","GPM6A","DDIT3","CCNB2","TMSB4X","TSPAN7","SRRM2","RHOC","PRKCE","AP2B1","GABRA1")
+
+pdf(file = "Matrix_plot_log.pdf",width = 12,height = 9)
+ad_plot_matrix_w_64(c("Micro"),Micro_DC_DE$rowname,"Disease vs Ctrl") %>% print()
+ad_plot_matrix_w_64(c("Micro"),row.names(Micro_S_DE),"Near plaque vs far away from plaque") %>% print()
+ad_plot_matrix_w_64(c("Astro"),Astro_DC_DE$rowname,"Disease vs Ctrl") %>% print()
+ad_plot_matrix_w_64(c("Oligo"),Oligo_DC_DE$rowname,"Disease vs Ctrl") %>% print()
+dev.off()
+
+pdf(file = "F6_EX_Inhi_Matrix_plot.pdf",width = 12,height = 9)
+ad_plot_matrix_w_64(c("Ex","CADG"),c("GPM6A", "DDIT3", "CCNB2", "SRRM2", "GFAP"),"Disease vs Ctrl",scale = "log") %>% print()
+ad_plot_matrix_w_64(c("Ex","CADG"),c("GPM6A", "DDIT3", "CCNB2", "SRRM2", "GFAP"),"Disease vs Ctrl",scale = "row-scale") %>% print()
+ad_plot_matrix_w_64(c("Inhi"),c("GPM6A", "DDIT3", "CCNB2", "SRRM2", "GFAP"),"Disease vs Ctrl",scale = "log") %>% print()
+ad_plot_matrix_w_64(c("Inhi"),c("GPM6A", "DDIT3", "CCNB2", "SRRM2", "GFAP"),"Disease vs Ctrl",scale = "row-scale") %>% print()
+dev.off()
+
+
+
+pdf(file = "F6_DG_CA1i_Matrix_plot.pdf",width = 12,height = 9)
+ad_plot_matrix_w_64(c("CA1"),c("BRINP1","SRRM2","FLT1","CDKN1A","CACNG4"),"Disease vs Ctrl",scale = "row-scale") %>% print()
+ad_plot_matrix_w_64(c("DG"),c("CCNB2","VTN","CTSB","BSG","CD63","PRKCE"),"Disease vs Ctrl",scale = "row-scale") %>% print()
+dev.off()
+
+```
+
+
+```{r dotplot}
+#Combine Seurat
+starmap_combined <- subset(starmap_raw, features = row.names(starmap_64@assays$RNA)) %>% 
+  merge(y = starmap_64, add.cell.ids = c("G2766_","G64_"), project = "Merged_starmap") %>% 
+  subset(subset = top_level == "Astro")
+
+DotPlot(starmap_combined,features = Astro_DC_DE$rowname[Astro_DC_DE$rowname %in% gene_list_64] %>% .[1:10],
+        group.by = "sample")
+
+```
+
+```{r grid analysis}
+tmp_img <- Image(starmap_64@misc[["AD_mouse9721_morph"]][["tau"]],colormode = Grayscale)
+tmp_mat <- matrix(0,nrow = floor(dim(tmp_img)[1] / 100),ncol = floor(dim(tmp_img)[2] / 100))
+for(i in 1:dim(tmp_mat)[1]){
+  for(j in 1:dim(tmp_mat)[2]){
+    tmp_mat[i,j] <- sum(tmp_img[(i*100-99):(i*100),(j*100-99):(j*100)])
+  }
+}
+cell_meta <- starmap@misc$AD_mouse9494_plaque_all$AD_mouse9494_cell_meta %>% 
+  subset(x < dim(tmp_mat)[1]*100 & y < dim(tmp_mat)[2]*100) %>%
+  data.frame(tau_group = tmp_mat[cbind(1+floor(.$x/100), 1+floor(.$y/100))]) %>%
+  mutate(tau_group = apply(.,MARGIN = 1,
+                           FUN = function(x){
+                             if(as.numeric(x[["tau_group"]]) < 1) return("none")
+                             else if(as.numeric(x[["tau_group"]]) < 100) return("medium")
+                             else return("dense")
+                           }) )
+tmp_starmap <- subset(starmap_scaled,subset = sample == "AD_mouse9494" & orig_index %in% cell_meta$orig_index)
+tmp_starmap@meta.data <- tmp_starmap@meta.data %>% data.frame(tau_group = cell_meta$tau_group)
+tmp_starmap <- subset(starmap_scaled,subset = top_level == "DG")
+tmp_starmap <- SetIdent(object = tmp_starmap, value  = tmp_starmap@meta.data[["tau_group"]])
+de_res <- FindMarkers(tmp_starmap,ident.1 = "dense",ident.2 = "none",logfc.threshold = 0)
+
+
+```
+
+```{r tau/gfap}
+#Using Scaled Obj
+#Add Tau flag to meta data
+starmap_scaled <- ad_starmap_normalize(starmap_raw)
+#starmap_scaled <- ad_starmap_normalize(starmap_64)
+starmap_scaled@meta.data <- starmap_scaled@meta.data %>% data.frame(tau_flag = ifelse(.$tau > 7,"Tau","Normal"))
+starmap_scaled <- SetIdent(object = starmap_scaled, value  = starmap_scaled@meta.data[["tau_flag"]])
+tmp_starmap <- subset(starmap_scaled,subset = top_level == "CA1")
+de_res <- FindMarkers(tmp_starmap,ident.1 = "Tau",ident.2 = "Normal",logfc.threshold = 0)
+de_res_64 <- FindMarkers(tmp_starmap,ident.1 = "Tau",ident.2 = "Normal",logfc.threshold = 0)
+
+gene_list_tau <- intersect(row.names(de_res_64)[de_res_64$p_val < 0.05],row.names(de_res)[de_res$p_val < 0.05])
+
+DotPlot(object = starmap_scaled, features = gene_list_tau) + coord_flip()
+DotPlot(object = starmap_scaled, features = row.names(de_res)[1:10]) + coord_flip()
+
+#Tau Distribution Around hippocampus area
+tau_img <- Image(starmap@misc[["AD_mouse9494_morph"]][["tau"]],colormode = Grayscale)
+
+plaque_img <- starmap@misc$`AD_mouse9494_plaque_Cortex`$AD_mouse9494_plaque_img
+AD9494_tau_vec <- rep(0,5)
+AD9494_plaque_vec <- rep(0,5)
+for(i in 1:5){
+  tmp_img <- dilate(plaque_img, kern = makeBrush(33 * i, shape = "disc"))
+  AD9494_tau_vec[i] <- sum(tau_img & tmp_img)
+  AD9494_plaque_vec[i]  <- sum(tmp_img)
+}
+
+plot_list[[1]] <- ggplot(data=data.frame(group = paste(c(1:5),"0um",sep = ""), tau = AD9494_tau_vec/AD9494_plaque_vec), aes(x=group, y=tau)) +
+  theme_classic() +
+  geom_bar(stat="identity",fill = "darkred") +
+  labs(title = "Tau Sub-cortical")
+pdf(file = "F6_tau_distr.pdf",width = 6,height = 4.5,useDingbats = FALSE)
+plot_list %>% print()
+dev.off()
+
+AD9919_fig <- list()
+AD9919_fig[["GFAP"]] <- readImage("data/2021-04-28-protein-images/gfap/AD_mouse9930.tif")
+AD9919_fig[["GFAP"]] <- AD9919_fig[["GFAP"]][1:5885,1:6708]
+AD9919_fig[["Plaque"]] <- starmap_64@misc[["AD_mouse9919_morph"]][["plaque"]]
+AD9919_tau_vec <- rep(0,5)
+AD9919_plaque_vec <- rep(0,5)
+for(i in 1:5){
+  tmp_img <- dilate(AD9919_fig[["Plaque"]], kern = makeBrush(33 * i, shape = "disc"))
+  AD9919_tau_vec[i] <- sum(AD9919_fig[["GFAP"]] & tmp_img)
+  AD9919_plaque_vec[i]  <- sum(tmp_img)
+}
+ggplot(data=data.frame(group = paste(c(1:5),"0um",sep = ""), gfap = AD9919_tau_vec/AD9919_plaque_vec), aes(x=group, y=gfap)) +
+  theme_classic() +
+  geom_bar(stat="identity",fill = "darkred")
+
+
+```
+
+```{r CA1-3/DG around Plaque Sub-cortical}
+palette_list <- cell_type_palette_list[["CADG"]]
+names(palette_list) <- cell_type_list[["CADG"]]
+pdf(file = "F6_CADG_comp.pdf",width = 6,height = 4.5,useDingbats = FALSE)
+ad_hl_cell_distr(starmap@misc[["AD_mouse9494_plaque_Sub-cortical"]][["AD_mouse9494_cell_meta"]]$min_border_dist,
+                           starmap@misc[["AD_mouse9494_plaque_Sub-cortical"]][["AD_mouse9494_cell_meta"]]$cell_type,
+                           palette_list = palette_list,
+                           scale = "percentage",title = paste("CADG","Sub-cortical 9494"),y_min = 0,y_max = 0.55) %>% print()
+
+ad_hl_cell_distr(starmap@misc[["AD_mouse9723_plaque_Sub-cortical"]][["AD_mouse9723_cell_meta"]]$min_border_dist,
+                           starmap@misc[["AD_mouse9723_plaque_Sub-cortical"]][["AD_mouse9723_cell_meta"]]$cell_type,
+                           palette_list = palette_list,
+                           scale = "percentage",title = paste("CADG","Sub-cortical 9723"),y_min = 0,y_max = 0.55) %>% print()
+dev.off()
+
+```
+
+```{r type-to-type dist and ridge plot}
+
+#Ex,Inhi,CA1-3 -> Neuron, Oligo,DAA,DAM
+cell_meta <- starmap@meta.data
+cell_meta$cell_type <- ifelse(starmap@meta.data$cell_type %in% c(cell_type_list[["Ex"]], 
+                                                                 cell_type_list[["Inhi"]], 
+                                                                 cell_type_list[["CADG"]]),
+                                      "Neuron",
+                                      ifelse(starmap@meta.data$cell_type %in% cell_type_list[["Oligo"]][1:3],
+                                             "Oligo",
+                                             ifelse(starmap@meta.data$cell_type == "Astro_Gfap/Vim",
+                                                    "DAA",
+                                                    ifelse(starmap@meta.data$cell_type == "Micro_Cst7/Ctsb",
+                                                           "DAM",
+                                                           ifelse(starmap@meta.data$cell_type %in% cell_type_list[["OPC"]],
+                                                                        "OPC","Other")))))
+Sub_cluster_dist <- list()
+Sub_cluster_dist[["AD9494"]] <- ad_calc_cluster_dist(cell_meta = cell_meta,
+                                                  sample_name = "AD_mouse9494",
+                                                  region = "all",
+                                                  Sub_level_clusters = c("DAM","DAA","Neuron"),
+                                                  plaque_meta = starmap@misc$AD_mouse9494_plaque_all$AD_mouse9494_plaque_meta)
+Sub_cluster_dist[["AD9494_Shuffle"]] <- ad_calc_cluster_dist(cell_meta = cell_meta,
+                                                  sample_name = "AD_mouse9494",
+                                                  region = "all",
+                                                  Sub_level_clusters = c("DAM","DAA","Neuron"),shuffle = T,
+                                                  plaque_meta = starmap@misc$AD_mouse9494_plaque_all$AD_mouse9494_plaque_meta)
+
+Sub_cluster_dist[["AD9723"]] <- ad_calc_cluster_dist(cell_meta = cell_meta,
+                                                  sample_name = "AD_mouse9723",
+                                                  region = "all",
+                                                  Sub_level_clusters = c("DAM","DAA","Neuron"),
+                                                  plaque_meta = starmap@misc$AD_mouse9723_plaque_all$AD_mouse9723_plaque_meta)
+Sub_cluster_dist[["AD9723_Shuffle"]] <- ad_calc_cluster_dist(cell_meta = cell_meta,
+                                                  sample_name = "AD_mouse9723",
+                                                  region = "all",
+                                                  Sub_level_clusters = c("DAM","DAA","Neuron"),shuffle = T,
+                                                  plaque_meta = starmap@misc$AD_mouse9723_plaque_all$AD_mouse9723_plaque_meta)
+
+
+Sub_cluster_dist[["AD9494"]]$type_from <- 
+  factor(Sub_cluster_dist[["AD9494"]]$type_from,levels = c("plaque","DAM","DAA","Neuron"))
+Sub_cluster_dist[["AD9494"]]$type_to <- 
+  factor(Sub_cluster_dist[["AD9494"]]$type_to,levels = rev(c("plaque","DAM","DAA","Neuron")))
+
+Sub_cluster_dist[["AD9494_Shuffle"]]$type_from <- 
+  factor(Sub_cluster_dist[["AD9494_Shuffle"]]$type_from,levels = c("plaque","DAM","DAA","Neuron"))
+Sub_cluster_dist[["AD9494_Shuffle"]]$type_to <- 
+  factor(Sub_cluster_dist[["AD9494_Shuffle"]]$type_to,levels = rev(c("plaque","DAM","DAA","Neuron")))
+
+Sub_cluster_dist[["AD9723"]]$type_from <- 
+  factor(Sub_cluster_dist[["AD9723"]]$type_from,levels = c("plaque","DAM","DAA","Neuron"))
+Sub_cluster_dist[["AD9723"]]$type_to <- 
+  factor(Sub_cluster_dist[["AD9723"]]$type_to,levels = rev(c("plaque","DAM","DAA","Neuron")))
+
+Sub_cluster_dist[["AD9723_Shuffle"]]$type_from <- 
+  factor(Sub_cluster_dist[["AD9723_Shuffle"]]$type_from,levels = c("plaque","DAM","DAA","Neuron"))
+Sub_cluster_dist[["AD9723_Shuffle"]]$type_to <- 
+  factor(Sub_cluster_dist[["AD9723_Shuffle"]]$type_to,levels = rev(c("plaque","DAM","DAA","Neuron")))
+
+plot_list <- list()
+plot_list[[1]] <- ad_plot_type_dist(Sub_cluster_dist$AD9494,Sub_cluster_dist$AD9494_Shuffle,"AD9494","Shuffled")
+plot_list[[2]] <- ad_plot_type_dist(Sub_cluster_dist$AD9723,Sub_cluster_dist$AD9723_Shuffle,"AD9723","Shuffled")
+
+#Density Ridges
+cell_meta <- starmap@misc$AD_mouse9494_plaque_all$AD_mouse9494_cell_meta
+cell_meta$cell_type <- ifelse(cell_meta$cell_type %in% c(cell_type_list[["Ex"]], 
+                                                                 cell_type_list[["Inhi"]], 
+                                                                 cell_type_list[["CADG"]]),
+                                      "Neuron",
+                                      ifelse(cell_meta$cell_type  %in% cell_type_list[["Oligo"]][1:3],
+                                             "Oligo",
+                                             ifelse(cell_meta$cell_type  == "Astro_Gfap/Vim",
+                                                    "DAA",
+                                                    ifelse(cell_meta$cell_type  == "Micro_Cst7/Ctsb",
+                                                           "DAM",
+                                                           ifelse(cell_meta$cell_type  %in% cell_type_list[["OPC"]],
+                                                                  "OPC","Other")))))
+library(ggridges)
+
+cell_meta <- filter(cell_meta, cell_type!= "Other" & min_border_dist < 33*4)
+#cell_meta <- filter(cell_meta, cell_type!= "Other" & min_dist < 330 & region == "Hippocampus")
+cell_meta$min_border_dist <- cell_meta$min_border_dist/3.3
+cell_meta$cell_type <- 
+  factor(cell_meta$cell_type,levels = rev(c("DAM","DAA","OPC","Oligo","Neuron")))
+plot_list[[3]] <- ggplot(data = cell_meta,
+       aes(x = min_border_dist, y = cell_type, fill = cell_type, height = ..density..)) +
+  labs(x = "Min_dist(micron)")+
+  #geom_density_ridges(stat = "density", adjust = 0.4) +
+  geom_density_ridges(stat = "binline", scale = 1, draw_baseline = F,binwidth = 10,center = 5) +
+  scale_x_continuous(expand = c(0, 0)) +
+  coord_cartesian(xlim = c(0,40)) +
+  scale_y_discrete(expand = expansion(mult = c(0.01, 0.3))) +
+  scale_fill_manual(values = rev(c("#fcb900","#29e322","#8600d4","#c800cc","#aaaaaa")))
+  theme_ridges()
+  
+pdf(file = "F7_type_dist_n_ridge.pdf",width = 6,height = 4.5,useDingbats = FALSE)
+plot_list %>% print()
+dev.off()
+  
+  
+  
+```
+  
+```{r GO Heatmap}
+DE_13mo <- list()
+starmap_scaled <- ad_starmap_normalize(starmap_raw)
+
+DE_13mo[["Micro"]] <- ad_D_vs_C_DE(starmap_scaled,"Micro","13_months")
+DE_13mo[["Astro"]] <- ad_D_vs_C_DE(starmap_scaled,"Astro","13_months")
+DE_13mo[["Oligo"]] <- ad_D_vs_C_DE(starmap_scaled,"Oligo","13_months")
+DE_13mo[["Neuron"]] <-   ad_D_vs_C_DE(starmap_scaled,c("Ex","CA1","CA2","CA3","DG","Inhi"),"13_months",logfc_cutoff = 0)
+
+gene_list <- DE_13mo[["Micro"]] %>% subset(p_val_adj < 0.05) %>% arrange(desc(avg_logFC)) %>% .$avg_logFC
+
+names(gene_list)  <- DE_13mo[["Micro"]] %>% subset(p_val_adj < 0.05) %>% 
+  arrange(desc(avg_logFC)) %>% .$rowname %>% str_to_title()
+
+myGO = fgsea::gmtPathways("Pathway_analysis/GOBP/mmusculus.GOBP.name.gmt") 
+
+pathwaysFiltered <- lapply(myGO, function(p) { unique(na.omit(match(p, names(gene_list)))) })
+pathwaysSizes <- sapply(pathwaysFiltered, length)
+
+toKeep <- which(15 <= pathwaysSizes & pathwaysSizes <= 1000)
+
+pathwaysFiltered <- pathwaysFiltered[toKeep]
+pathwaysSizes <- pathwaysSizes[toKeep]
+    
+gseaStatRes <- do.call(rbind,
+                           lapply(pathwaysFiltered,
+                                  calcGseaStat,
+                                  stats             = gene_list,
+                                  returnLeadingEdge = TRUE))
+
+gsea_res <- fgsea::fgsea(pathways = myGO, 
+                           stats = gene_list,
+                           minSize=15,
+                           maxSize=600,
+                           nperm=10000)
+  GSEA(gene_list,
+                 myGO,
+                 pval = 0.05)
+
+
+
+
+for(i in c("Micro","Astro","Oligo","Neuron")){
+  print(i)
+  write_csv(DE_13mo[[i]], path = paste("Export_csv/AD_13mo_",i,".csv",sep = ""))
+}
+
+tmp_mat <- matrix(0,ncol = 4, nrow = 4)
+row.names(tmp_mat) <- colnames(tmp_mat) <-c("Micro","Astro","Oligo","Neuron")
+for(i in c("Micro","Astro","Oligo","Neuron")){
+  for(j in c("Micro","Astro","Oligo","Neuron")){
+    tmp_mat[i,j] <- length(intersect(DE_13mo[[i]]$rowname[DE_13mo[[i]]$p_val_adj < 0.05 & abs(DE_13mo[[i]]$avg_logFC) > 0.1],
+                                     DE_13mo[[j]]$rowname[DE_13mo[[j]]$p_val_adj < 0.05 & abs(DE_13mo[[j]]$avg_logFC) > 0.1]))
+  }
+}
+paste(intersect(DE_13mo[["Micro"]]$rowname[DE_13mo[["Micro"]]$p_val_adj < 0.05],DE_13mo[["Neuron"]]$rowname[DE_13mo[["Neuron"]]$p_val_adj < 0.05]),collapse = " ")
+DE_8mo <- list()
+
+DE_8mo[["Micro"]] <- ad_D_vs_C_DE(starmap_scaled,"Micro","8_months")
+DE_8mo[["Astro"]] <- ad_D_vs_C_DE(starmap_scaled,"Astro","8_months")
+DE_8mo[["Oligo"]] <- ad_D_vs_C_DE(starmap_scaled,"Oligo","8_months")
+DE_8mo[["Neuron"]] <-   ad_D_vs_C_DE(starmap_scaled,c("Ex","CA1","CA2","CA3","DG","Inhi"),"8_months")
+DE_8mo[["Inhi"]] <-  ad_D_vs_C_DE(starmap_scaled,"Inhi",c("8_months","13_months"))
+
+for(i in c("Micro","Astro","Oligo","Neuron")){
+  print(i)
+  print(paste(DE_8mo[[i]]$rowname[DE_8mo[[i]]$p_val_adj < 0.05],collapse = " "))
+}
+```
+
+```{r}
+
+#Toppgene Heatmap
+GOBP_list <- list()
+
+require(readr)
+GOBP_list[["Micro"]] <-  read_csv("~/Desktop/At_Broad/AD/Pathway_analysis/GOBP/Reproduce/Micro_8mo.csv")
+GOBP_list[["Astro"]] <-  read_csv("~/Desktop/At_Broad/AD/Pathway_analysis/GOBP/Reproduce/Astro_8mo.csv")
+GOBP_list[["Oligo"]] <-  read_csv("~/Desktop/At_Broad/AD/Pathway_analysis/GOBP/Reproduce/Oligo_8mo.csv")
+GOBP_list[["Neuron"]] <-read_csv("~/Desktop/At_Broad/AD/Pathway_analysis/GOBP/Reproduce/Neuron_8mo.csv")
+GOBP_list[["Inhi"]] <-   read_csv("~/Desktop/At_Broad/AD/Pathway_analysis/GOBP/Reproduce/Inhi_13mo.csv")
+require(tidyverse)
+top_GO <- GOBP_list[["Micro"]]$term_name[1:3] %>% 
+    union(GOBP_list[["Astro"]]$term_name[1:8]) %>% 
+    union(GOBP_list[["Oligo"]]$term_name[1:10]) %>%
+    union(GOBP_list[["Neuron"]]$term_name[1:10]) #%>%
+     union(GOBP_list[["Inhi"]]$term_name[1:15]) 
+top_GO_df <- data.frame(name = top_GO,Micro = 0,Astro = 0,Oligo = 0,Neuron = 0)
+for (i in 1:dim(top_GO_df)[1]) {
+  for(j in c("Micro","Astro","Oligo","Neuron")){
+    if(sum(GOBP_list[[j]]$term_name == top_GO_df$name[i]) == 0){
+      top_GO_df[[j]][i] <- 0
+    }else{
+      top_GO_df[[j]][i] <- min(10,GOBP_list[[j]]$negative_log10_of_adjusted_p_value[GOBP_list[[j]]$term_name == top_GO_df$name[i]])
+    }
+  }
+}
+require(gplots)
+require(viridis)
+pdf(file = "F7S_8mo_GO_heatmap.pdf",width = 8,height = 12,useDingbats = FALSE)
+heatmap.2(as.matrix(as.data.frame(top_GO_df[,-1],row.names = as.character(top_GO_df$name))),
+          Colv=T,
+          dendrogram = "row",
+          col = colorRampPalette(brewer.pal(9, 'Blues'))(128),
+          trace="none",
+          sepwidth=c(0.05, 0.05), 
+          sepcolor='black',
+          srtCol = 315, adjCol = c(0.3,0),
+          srtRow = 0,
+          margins = c(5, 25),
+          colsep=0:ncol(top_GO_df),
+          rowsep=0:(nrow(top_GO_df)+1))
+dev.off()
+
+```
+
+
