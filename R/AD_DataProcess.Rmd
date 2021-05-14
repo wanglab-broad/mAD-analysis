@@ -19,7 +19,7 @@ setwd("~/Desktop/At_Broad/AD")
 #Convert("data/2021-04-22-starmap-mAD-64-genes-raw.h5ad", dest = "h5seurat", overwrite = TRUE)
 #Convert("data/2021-04-22-starmap-mAD-raw.h5ad", dest = "h5seurat", overwrite = TRUE)
 
-source("AD_FunctionDefinition.R")
+source("RScript/AD_FunctionDefinition.R")
 #Load Scaled Data
 ad_ini()
 starmap <- LoadH5Seurat("data/2020-12-27-starmap-mAD-scaled.h5seurat")
@@ -35,10 +35,10 @@ colnames(starmap_64@meta.data)[19] <- "cell_type"
 top_level_palette_list <- as.character(unlist(starmap_raw@misc[["top_hex_dict"]]))[colnames(starmap_raw@misc[["top_hex_dict"]]) != "DG"]
 names(top_level_palette_list) <- colnames(starmap_raw@misc[["top_hex_dict"]])[colnames(starmap_raw@misc[["top_hex_dict"]]) != "DG"]
 #AD_64 palette list
-top_level_palette_list <- as.character(unlist(starmap_64@misc[["top_hex_dict"]]))
-names(top_level_palette_list) <- names(unlist(starmap_64@misc[["top_hex_dict"]]))
-top_level_palette_list <- c(top_level_palette_list[!names(top_level_palette_list) %in% c("DG","LHb")],"Mix" = "#8c8c8c")
-
+top_level_palette_list <- as.character(unlist(starmap_64@misc[["top_hex_dict_64"]]))
+names(top_level_palette_list) <- names(unlist(starmap_64@misc[["top_hex_dict_64"]]))
+top_level_palette_list <- c(top_level_palette_list[!names(top_level_palette_list) %in% c("DG","LHb")])
+top_level_palette_list[["Mix"]] <- "#8c8c8c"
 
 cell_type_list <- list("Ex" = c("L2/3" ,"L4/5_RSC_A","L4/5_RSC_B","L6"),
                        "Micro" = c("Micro", "Micro_Gpr34", "Micro_Cst7/Ctsb"),
@@ -48,9 +48,9 @@ cell_type_list <- list("Ex" = c("L2/3" ,"L4/5_RSC_A","L4/5_RSC_B","L6"),
                        "Inhi" = c("Inhi_Cnr1","Inhi_Lamp5","Inhi_Pvalb","Inhi_Sst"),
                        "CADG" = c("CA1","CA2","CA3","DG"))
 cell_type_palette_list <- list("Ex" = c("#f4777c","#f8bf76" ,"#fdfe02","#b0ff00"),
-                    "Micro" = c("#0dd193","#7a9deb" ,"#fc8d62"),
-                    "Oligo" = c("#0dd193","#7a9deb" ,"#fc8d62","#8600d4"),
-                    "Astro" = c("#0dd193","#7a9deb" ,"#fc8d62"),
+                    "Micro" = c("#2fe04d","#2c73e6","#fa733e"),
+                    "Oligo" = c("#2fe04d","#2c73e6","#fa733e","#8600d4"),
+                    "Astro" = c("#2fe04d","#2c73e6","#fa733e"),
                     "OPC" = c("#0dd193","#7a9deb"),
                     "Inhi" = c("#3774f8","#43b500" ,"#bcaa03","#f19cd3"),
                     "CADG" = c("#90fffe","#3b92ff" ,"#9600ff","#95000a"))
@@ -61,11 +61,13 @@ cell_type_palette_list <- list("Ex" = c("#f4777c","#f8bf76" ,"#fdfe02","#b0ff00"
 ```{r calc border-dist}
 starmap <- ad_calc_plaque_dist(starmap,starmap@misc[["AD_mouse9494_morph"]], 400, "AD_mouse9494", top_level_palette_list, "all")
 starmap <- ad_calc_plaque_dist(starmap,starmap@misc[["AD_mouse9494_morph"]], 400, "AD_mouse9494", top_level_palette_list, "Cortex")
-starmap <- ad_calc_plaque_dist(starmap,starmap@misc[["AD_mouse9494_morph"]], 400, "AD_mouse9494", top_level_palette_list, "Sub-cortical")
+starmap <- ad_calc_plaque_dist(starmap,starmap@misc[["AD_mouse9494_morph"]], 400, "AD_mouse9494", top_level_palette_list, "White Matter")
+starmap <- ad_calc_plaque_dist(starmap,starmap@misc[["AD_mouse9494_morph"]], 400, "AD_mouse9494", top_level_palette_list, "Hippocampus")
 
 starmap <- ad_calc_plaque_dist(starmap,starmap@misc[["AD_mouse9723_morph"]], 400, "AD_mouse9723", top_level_palette_list, "all")
 starmap <- ad_calc_plaque_dist(starmap,starmap@misc[["AD_mouse9723_morph"]], 400, "AD_mouse9723", top_level_palette_list, "Cortex")
-starmap <- ad_calc_plaque_dist(starmap,starmap@misc[["AD_mouse9723_morph"]], 400, "AD_mouse9723", top_level_palette_list, "Sub-cortical")
+starmap <- ad_calc_plaque_dist(starmap,starmap@misc[["AD_mouse9723_morph"]], 400, "AD_mouse9723", top_level_palette_list, "White Matter")
+starmap <- ad_calc_plaque_dist(starmap,starmap@misc[["AD_mouse9723_morph"]], 400, "AD_mouse9723", top_level_palette_list, "Hippocampus")
 
 starmap_64 <- ad_calc_plaque_dist(starmap_64,starmap_64@misc[["AD_mouse9919_morph"]], 400, "AD_mouse9919", top_level_palette_list, "all")
 starmap_64 <- ad_calc_plaque_dist(starmap_64,starmap_64@misc[["AD_mouse9721_morph"]], 400, "AD_mouse9721", top_level_palette_list, "all")
@@ -74,14 +76,33 @@ starmap_64 <- ad_calc_plaque_dist(starmap_64,starmap_64@misc[["AD_mouse9721_morp
 ##Plot cell type distribution
 ```{r}
 #Running in console
-ad_distr_fig_export_regional(starmap, "AD_mouse9494",cell_type_list,cell_type_palette_list)
-ad_distr_fig_export_regional(starmap, "AD_mouse9723", cell_type_list,cell_type_palette_list, 
-                    scale_max = c("Micro"=1,"Astro"=0.25,"Oligo"=0.75, "Ex"=0.6,"Inhi"=0.15))
+scale_density_max <- list()
+scale_density_max[["Cortex"]]       <- c("Micro"=3000,"Astro"=500,"Oligo"=2500, "Ex"=2000,"Inhi"=250)
+scale_density_max[["White Matter"]] <- c("Micro"=300, "Astro"=200,"Oligo"=200, "Ex"=200,"Inhi"=250)
+scale_density_max[["Hippocampus"]]  <- c("Micro"=2000,"Astro"=400,"Oligo"=500, "Ex"=200,"Inhi"=250)
+ad_distr_fig_export_regional(starmap, "AD_mouse9494",cell_type_list,cell_type_palette_list,scale_density_max = scale_density_max)
+
+scale_density_max <- list()
+scale_density_max[["Cortex"]]       <- c("Micro"=3000,"Astro"=400,"Oligo"=700, "Ex"=2000,"Inhi"=300)
+scale_density_max[["White Matter"]] <- c("Micro"=100, "Astro"=100,"Oligo"=200, "Ex"=200,"Inhi"=300)
+scale_density_max[["Hippocampus"]]  <- c("Micro"=100,"Astro"=100,"Oligo"=100, "Ex"=200,"Inhi"=300)
+ad_distr_fig_export_regional(starmap, "AD_mouse9723", cell_type_list,cell_type_palette_list, scale_density_max = scale_density_max,
+                    scale_max = c("Micro"=1,"Astro"=0.75,"Oligo"=1, "Ex"=0.6,"Inhi"=0.15,"CADG" = 0.6))
 
 ad_distr_fig_export_all(starmap_64, "AD_mouse9919", cell_type_list, cell_type_palette_list,
                     scale_max = c("Micro"=0.75,"Astro"=0.2,"Oligo"=0.25, "Ex"=0.3,"Inhi"=0.1))
 ad_distr_fig_export_all(starmap_64, "AD_mouse9721", cell_type_list, cell_type_palette_list, 
                     scale_max = c("Micro"=0.75,"Astro"=0.2,"Oligo"=0.25, "Ex"=0.3,"Inhi"=0.1))
+
+pdf(file = "F2S_Overall_density.pdf",width = 12,height = 9)
+starmap@misc$AD_mouse9494_plaque_all$AD_mouse9494_t_l_d_plotlist[[2]] %>% print()
+starmap@misc$AD_mouse9723_plaque_all$AD_mouse9723_t_l_d_plotlist[[2]] %>% print()
+starmap_64@misc$AD_mouse9919_plaque_all$AD_mouse9919_t_l_d_plotlist[[2]] %>% print()
+starmap_64@misc$AD_mouse9721_plaque_all$AD_mouse9721_t_l_d_plotlist[[2]] %>% print()
+dev.off()
+
+
+
 
 ```
 
@@ -667,47 +688,29 @@ dev.off()
 DE_13mo <- list()
 starmap_scaled <- ad_starmap_normalize(starmap_raw)
 
-DE_13mo[["Micro"]] <- ad_D_vs_C_DE(starmap_scaled,"Micro","13_months")
-DE_13mo[["Astro"]] <- ad_D_vs_C_DE(starmap_scaled,"Astro","13_months")
-DE_13mo[["Oligo"]] <- ad_D_vs_C_DE(starmap_scaled,"Oligo","13_months")
-DE_13mo[["Neuron"]] <-   ad_D_vs_C_DE(starmap_scaled,c("Ex","CA1","CA2","CA3","DG","Inhi"),"13_months",logfc_cutoff = 0)
+DE_13mo[["Micro"]] <- ad_D_vs_C_DE(starmap_scaled,"Micro","13_months",logfc_cutoff = 0,p_cutoff = 1)
+DE_13mo[["Astro"]] <- ad_D_vs_C_DE(starmap_scaled,"Astro","13_months",logfc_cutoff = 0,p_cutoff = 1)
+DE_13mo[["Oligo"]] <- ad_D_vs_C_DE(starmap_scaled,"Oligo","13_months",logfc_cutoff = 0,p_cutoff = 1)
+DE_13mo[["Neuron"]] <-   ad_D_vs_C_DE(starmap_scaled,c("Ex","CA1","CA2","CA3","DG","Inhi"),"13_months",logfc_cutoff = 0,p_cutoff = 1)
+DE_13mo[["DG"]] <- ad_D_vs_C_DE(starmap_scaled,"DG","13_months",logfc_cutoff = 0,p_cutoff = 1)
 
-gene_list <- DE_13mo[["Micro"]] %>% subset(p_val_adj < 0.05) %>% arrange(desc(avg_logFC)) %>% .$avg_logFC
+plot_list <- list()
+plot_list[["Micro"]] <- ad_D_vs_C_DE_heatmap(starmap_scaled,"Micro","13_months",FC_cutoff = 0.1,draw_connector = T)
+plot_list[["Astro"]] <- ad_D_vs_C_DE_heatmap(starmap_scaled,"Astro","13_months",FC_cutoff = 0.1,draw_connector = T)
+plot_list[["Oligo"]] <- ad_D_vs_C_DE_heatmap(starmap_scaled,"Oligo","13_months",FC_cutoff = 0.1,draw_connector = T)  
+plot_list[["Ex"]] <-   ad_D_vs_C_DE_heatmap(starmap_scaled,c("Ex","CA1","CA2","CA3","DG"),"13_months",FC_cutoff = 0.1,draw_connector = T)
+plot_list[["Inhi"]] <-   ad_D_vs_C_DE_heatmap(starmap_scaled,c("Inhi"),"13_months",FC_cutoff = 0.1,draw_connector = T)
+pdf(file = "F3-6_13mo_volcano_plot.pdf",width = 12,height = 9,useDingbats = FALSE)
+plot_list %>% print()
+dev.off()
 
-names(gene_list)  <- DE_13mo[["Micro"]] %>% subset(p_val_adj < 0.05) %>% 
-  arrange(desc(avg_logFC)) %>% .$rowname %>% str_to_title()
-
-myGO = fgsea::gmtPathways("Pathway_analysis/GOBP/mmusculus.GOBP.name.gmt") 
-
-pathwaysFiltered <- lapply(myGO, function(p) { unique(na.omit(match(p, names(gene_list)))) })
-pathwaysSizes <- sapply(pathwaysFiltered, length)
-
-toKeep <- which(15 <= pathwaysSizes & pathwaysSizes <= 1000)
-
-pathwaysFiltered <- pathwaysFiltered[toKeep]
-pathwaysSizes <- pathwaysSizes[toKeep]
-    
-gseaStatRes <- do.call(rbind,
-                           lapply(pathwaysFiltered,
-                                  calcGseaStat,
-                                  stats             = gene_list,
-                                  returnLeadingEdge = TRUE))
-
-gsea_res <- fgsea::fgsea(pathways = myGO, 
-                           stats = gene_list,
-                           minSize=15,
-                           maxSize=600,
-                           nperm=10000)
-  GSEA(gene_list,
-                 myGO,
-                 pval = 0.05)
-
-
-
-
+#Export 
 for(i in c("Micro","Astro","Oligo","Neuron")){
   print(i)
-  write_csv(DE_13mo[[i]], path = paste("Export_csv/AD_13mo_",i,".csv",sep = ""))
+  write_tsv(data.frame(names = DE_13mo[[i]] %>% 
+  arrange(desc(avg_logFC)) %>% .$rowname %>% str_to_title(),
+                     logfc = DE_13mo[[i]] %>% arrange(desc(avg_logFC)) %>% .$avg_logFC),
+  path = paste(i,"_13mo_DE.rnk",sep = ""),col_names = F)
 }
 
 tmp_mat <- matrix(0,ncol = 4, nrow = 4)
@@ -721,15 +724,18 @@ for(i in c("Micro","Astro","Oligo","Neuron")){
 paste(intersect(DE_13mo[["Micro"]]$rowname[DE_13mo[["Micro"]]$p_val_adj < 0.05],DE_13mo[["Neuron"]]$rowname[DE_13mo[["Neuron"]]$p_val_adj < 0.05]),collapse = " ")
 DE_8mo <- list()
 
-DE_8mo[["Micro"]] <- ad_D_vs_C_DE(starmap_scaled,"Micro","8_months")
-DE_8mo[["Astro"]] <- ad_D_vs_C_DE(starmap_scaled,"Astro","8_months")
-DE_8mo[["Oligo"]] <- ad_D_vs_C_DE(starmap_scaled,"Oligo","8_months")
-DE_8mo[["Neuron"]] <-   ad_D_vs_C_DE(starmap_scaled,c("Ex","CA1","CA2","CA3","DG","Inhi"),"8_months")
-DE_8mo[["Inhi"]] <-  ad_D_vs_C_DE(starmap_scaled,"Inhi",c("8_months","13_months"))
+DE_8mo[["Micro"]] <- ad_D_vs_C_DE(starmap_scaled,"Micro","8_months",logfc_cutoff = 0)
+DE_8mo[["Astro"]] <- ad_D_vs_C_DE(starmap_scaled,"Astro","8_months",logfc_cutoff = 0)
+DE_8mo[["Oligo"]] <- ad_D_vs_C_DE(starmap_scaled,"Oligo","8_months",logfc_cutoff = 0)
+DE_8mo[["Neuron"]] <-   ad_D_vs_C_DE(starmap_scaled,c("Ex","CA1","CA2","CA3","DG","Inhi"),"8_months",logfc_cutoff = 0)
+
 
 for(i in c("Micro","Astro","Oligo","Neuron")){
   print(i)
-  print(paste(DE_8mo[[i]]$rowname[DE_8mo[[i]]$p_val_adj < 0.05],collapse = " "))
+  write_tsv(data.frame(names = DE_8mo[[i]] %>% 
+  arrange(desc(avg_logFC)) %>% .$rowname %>% str_to_title(),
+                     logfc = DE_8mo[[i]] %>% arrange(desc(avg_logFC)) %>% .$avg_logFC),
+  path = paste(i,"_8mo_DE.rnk",sep = ""),col_names = F)
 }
 ```
 
@@ -745,18 +751,71 @@ GOBP_list[["Oligo"]] <-  read_csv("~/Desktop/At_Broad/AD/Pathway_analysis/GOBP/R
 GOBP_list[["Neuron"]] <-read_csv("~/Desktop/At_Broad/AD/Pathway_analysis/GOBP/Reproduce/Neuron_8mo.csv")
 GOBP_list[["Inhi"]] <-   read_csv("~/Desktop/At_Broad/AD/Pathway_analysis/GOBP/Reproduce/Inhi_13mo.csv")
 require(tidyverse)
-top_GO <- GOBP_list[["Micro"]]$term_name[1:3] %>% 
-    union(GOBP_list[["Astro"]]$term_name[1:8]) %>% 
-    union(GOBP_list[["Oligo"]]$term_name[1:10]) %>%
-    union(GOBP_list[["Neuron"]]$term_name[1:10]) #%>%
-     union(GOBP_list[["Inhi"]]$term_name[1:15]) 
+
+
+```
+
+```{r GSEA}
+#load 13mo GSEA result 
+gsea_res <- list()
+gsea_res[["Micro"]] <- rbind(read_tsv(file = "Pathway_analysis/GSEA/Micro_13mo_pos.tsv"),
+                             read_tsv(file = "Pathway_analysis/GSEA/Micro_13mo_neg.tsv")) %>% subset(`NOM p-val` < 0.05) %>% arrange(desc(NES))
+gsea_res[["Astro"]] <- rbind(read_tsv(file = "Pathway_analysis/GSEA/Astro_13mo_pos.tsv"),
+                             read_tsv(file = "Pathway_analysis/GSEA/Astro_13mo_neg.tsv")) %>% subset(`NOM p-val` < 0.05) %>% arrange(desc(NES))
+gsea_res[["Oligo"]] <- rbind(read_tsv(file = "Pathway_analysis/GSEA/Oligo_13mo_pos.tsv"),
+                             read_tsv(file = "Pathway_analysis/GSEA/Oligo_13mo_neg.tsv")) %>% subset(`NOM p-val` < 0.05)%>% arrange(desc(NES))
+gsea_res[["Neuron"]] <- rbind(read_tsv(file = "Pathway_analysis/GSEA/Neuron_13mo_pos.tsv"),
+                              read_tsv(file = "Pathway_analysis/GSEA/Neuron_13mo_neg.tsv")) %>% subset(`NOM p-val` < 0.05) %>% arrange(desc(NES))
+gsea_res[["DG"]] <- rbind(read_tsv(file = "Pathway_analysis/GSEA/DG_13mo_pos.tsv"),
+                          read_tsv(file = "Pathway_analysis/GSEA/DG_13mo_neg.tsv")) %>% subset(`NOM p-val` < 0.05) %>% arrange(desc(NES))
+
+gsea_res[["Micro"]] <- rbind(read_tsv(file = "Pathway_analysis/GSEA/Micro_8mo_pos.tsv"),
+                             read_tsv(file = "Pathway_analysis/GSEA/Micro_8mo_neg.tsv")) %>% subset(`NOM p-val` < 0.05) %>% arrange(desc(NES))
+gsea_res[["Astro"]] <- rbind(read_tsv(file = "Pathway_analysis/GSEA/Astro_8mo_pos.tsv"),
+                             read_tsv(file = "Pathway_analysis/GSEA/Astro_8mo_neg.tsv")) %>% subset(`NOM p-val` < 0.05) %>% arrange(desc(NES))
+gsea_res[["Oligo"]] <- rbind(read_tsv(file = "Pathway_analysis/GSEA/Oligo_8mo_pos.tsv"),
+                             read_tsv(file = "Pathway_analysis/GSEA/Oligo_8mo_neg.tsv")) %>% subset(`NOM p-val` < 0.05) %>% arrange(desc(NES))
+gsea_res[["Neuron"]] <- rbind(read_tsv(file = "Pathway_analysis/GSEA/Neuron_8mo_pos.tsv"),
+                              read_tsv(file = "Pathway_analysis/GSEA/Neuron_8mo_neg.tsv")) %>% subset(`NOM p-val` < 0.05) %>% arrange(desc(NES))
+
+myGO <- suppressMessages(GSA::GSA.read.gmt("Pathway_analysis/gprofiler_full_mmusculus.name.gmt"))
+myGO <- data.frame(GOID = myGO$geneset.names, 
+                   Description = myGO$geneset.descriptions, 
+                   Term_size = lengths(myGO$genesets),
+                   row.names = myGO$geneset.names)
+
+
+#arrange gsea result
+for(i in c("Micro","Astro","Oligo","Neuron","DG")){
+  gsea_res[[i]] <- gsea_res[[i]] %>% .[,c(1,2,4:7)] %>% rename(`GS<br> follow link to MSigDB` = "GOID", `NOM p-val` = "p_val")
+  gsea_res[[i]]$NAME <- myGO[gsea_res[[i]]$GOID,2] 
+  gsea_res[[i]] <- gsea_res[[i]][myGO[gsea_res[[i]]$GOID,3] >= 5 & myGO[gsea_res[[i]]$GOID,3] <= 100, ] %>% arrange(p_val)
+}
+
+pdf(file = "F3-5_GSEA_Barplot_p_001.pdf",width = 8,height = 12,useDingbats = FALSE)
+for(i in c("Micro","Astro","Oligo")){
+plot_list[[i]] <- ggplot(data = gsea_res[[i]],
+       aes(x = reorder(NAME,ES), y = ES, fill = ES < 0))+
+  geom_bar(stat = "identity")+
+  coord_flip() +
+  labs(x = "GO Terms", y = "Enrichment Score",
+       title = paste("GO:BP",i)) +
+  theme_minimal()
+}
+plot_list %>% print()
+dev.off()
+
+top_GO <- gsea_res[["Micro"]]$NAME[1:9] %>% 
+    union(gsea_res[["Astro"]]$NAME[1:3]) %>% 
+    union(gsea_res[["Oligo"]]$NAME[1:4]) %>%
+    union(gsea_res[["Neuron"]]$NAME[1:15])  
 top_GO_df <- data.frame(name = top_GO,Micro = 0,Astro = 0,Oligo = 0,Neuron = 0)
 for (i in 1:dim(top_GO_df)[1]) {
   for(j in c("Micro","Astro","Oligo","Neuron")){
-    if(sum(GOBP_list[[j]]$term_name == top_GO_df$name[i]) == 0){
+    if(sum(as.character(gsea_res[[j]]$NAME) == top_GO_df$name[i]) == 0){
       top_GO_df[[j]][i] <- 0
     }else{
-      top_GO_df[[j]][i] <- min(10,GOBP_list[[j]]$negative_log10_of_adjusted_p_value[GOBP_list[[j]]$term_name == top_GO_df$name[i]])
+      top_GO_df[[j]][i] <- gsea_res[[j]]$NES[as.character(gsea_res[[j]]$NAME) == top_GO_df$name[i]]
     }
   }
 }
@@ -764,9 +823,9 @@ require(gplots)
 require(viridis)
 pdf(file = "F7S_8mo_GO_heatmap.pdf",width = 8,height = 12,useDingbats = FALSE)
 heatmap.2(as.matrix(as.data.frame(top_GO_df[,-1],row.names = as.character(top_GO_df$name))),
-          Colv=T,
+          Colv=F,
           dendrogram = "row",
-          col = colorRampPalette(brewer.pal(9, 'Blues'))(128),
+          col = rev(colorRampPalette(brewer.pal(9, 'RdBu'))(128)),
           trace="none",
           sepwidth=c(0.05, 0.05), 
           sepcolor='black',
@@ -776,7 +835,6 @@ heatmap.2(as.matrix(as.data.frame(top_GO_df[,-1],row.names = as.character(top_GO
           colsep=0:ncol(top_GO_df),
           rowsep=0:(nrow(top_GO_df)+1))
 dev.off()
-
 ```
 
 

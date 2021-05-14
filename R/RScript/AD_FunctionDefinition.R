@@ -66,11 +66,11 @@ ad_plot_cell_distr <- function(min_dist_vec, #vector of cell min_dist info
     
   }else if(scale == "density"){
     for(i in 1:rings){
-      tmp_df[tmp_df$Dist_group == paste(i*step,"um",sep = ""),3] = 
+      tmp_df[tmp_df$Dist_group == paste(i*step,"um",sep = ""),3] = 1000000 *
         tmp_df[tmp_df$Dist_group == paste(i*step,"um",sep = ""),3]/area_vec[i]*3.3^2
     }
     if(overall){
-      tmp_df[tmp_df$Dist_group == "overall",3] = 
+      tmp_df[tmp_df$Dist_group == "overall",3] = 1000000 *
         tmp_df[tmp_df$Dist_group == "overall",3]/img_size*3.3^2
     }
   }
@@ -106,9 +106,10 @@ ad_hl_cell_distr <- function(min_dist_vec,
   label_vec <- factor(label_vec, levels = names(palette_list))
   
   g <- ad_plot_cell_distr(min_dist_vec,label_vec,scale,palette_list,title,step, rings, area_vec, img_size, overall)
+  if(scale != "density"){
+    g + coord_cartesian(ylim = c(y_min,y_max))
+  }
   
-  g + coord_cartesian(ylim = c(y_min,y_max)) 
-    
 }
 #####Function Definition: preprocess and min_dist calc#####
 #TEST
@@ -120,7 +121,7 @@ ad_hl_cell_distr <- function(min_dist_vec,
 #region            <- "Cortex"
 #palette_list <- as.character(unlist(starmap_raw@misc[["top_hex_dict"]]))[colnames(starmap_raw@misc[["top_hex_dict"]]) != "DG"]
 #names(palette_list) <- colnames(starmap_raw@misc[["top_hex_dict"]])[colnames(starmap_raw@misc[["top_hex_dict"]]) != "DG"]
-rm(list = c("starmap_obj","img_list","cell_meta","plaque_meta","sample_name","min_area","region"))        
+#rm(list = c("starmap_obj","img_list","cell_meta","plaque_meta","sample_name","min_area","region"))        
 #
 ad_calc_plaque_dist <- function(starmap_obj,
                                 img_list,
@@ -252,7 +253,17 @@ ad_calc_plaque_dist <- function(starmap_obj,
   
   plaque <- Image(plaque != 0,colormode = Grayscale)
   tmp_vec <- rep(0,5)
-  img_size <- dim(plaque)[1] * dim(plaque)[2]
+  if(region == "all"){
+    img_size <- dim(plaque)[1] * dim(plaque)[2]
+  }else if(region == "Sub-cortical"){
+    img_size <- sum(img_list[["region"]] == 2) + 
+      sum(img_list[["region"]] == 3)
+  }else{
+    x <- switch(region,
+                "Cortex" = 1,"White Matter" = 2, "Hippocampus" = 3)
+    img_size <- sum(img_list[["region"]] == x)
+  }
+  
 
   names(tmp_vec) <- paste(1:5,"0um",sep = "")
   for(i in 1:5){
@@ -264,6 +275,16 @@ ad_calc_plaque_dist <- function(starmap_obj,
   return_list[[paste(sample_name,"cell_meta",sep = "_")]] <- cell_meta
   return_list[[paste(sample_name,"plaque_meta",sep = "_")]] <- plaque_meta
   return_list[[paste(sample_name,"plaque_img",sep = "_")]] <- plaque
+  #Filter Palette list 
+  if(region == "Sub-cortical"){
+    palette_list <- palette_list[names(palette_list) != "Ex"]
+  }else if(region == "Cortex"){
+    palette_list <- palette_list[!names(palette_list) %in% c("CA1","CA2","CA3","DG","LHb")]
+  }else if(region == "Hippocampus"){
+    palette_list <- palette_list[names(palette_list) != "Ex"] 
+  }else if(region == "White Matter"){
+    palette_list <- palette_list[!names(palette_list) %in% c("CA1","CA2","CA3","DG","LHb","Ex","Inhi")]
+  }
   plot_list <- list()
   #min_dist_vec, #vector of cell min_dist info
   #label_vec,    #vector of cell label(Top-level etc)
@@ -278,7 +299,7 @@ ad_calc_plaque_dist <- function(starmap_obj,
   plot_list[[1]] <- ad_plot_cell_distr(cell_meta$min_border_dist,cell_meta$top_level,scale = "none", palette_list,
                                     title = paste(sample_name,"Raw Counts"), overall = F)
   plot_list[[2]] <- ad_plot_cell_distr(cell_meta$min_border_dist,cell_meta$top_level,scale = "density", palette_list,
-                                    title = paste(sample_name,"Cells per sq. microns"),area_vec = tmp_vec,img_size = img_size, overall = T)
+                                    title = paste(sample_name,"Cells per sq. mm"),area_vec = tmp_vec,img_size = img_size, overall = T)
   plot_list[[3]] <- ad_plot_cell_distr(cell_meta$min_border_dist,cell_meta$top_level,scale = "percentage",palette_list,
                                     title = paste(sample_name,"Percentage"))
   require(ggpubr)
@@ -332,6 +353,66 @@ ad_D_vs_C_DE <- function(starmap_obj,
   marker_list <- marker_list[marker_list$p_val < p_cutoff ,]
   #write.csv(marker_list,paste("disease_vs_ctrl",top_level_list[i],".csv",sep = "_"),row.names = T)
   return(marker_list)
+}
+
+ad_D_vs_C_DE_heatmap <- function(starmap_obj,
+                      top_level_list,
+                      time_name,
+                      fig_title = NULL,
+                      FC_cutoff = 0.1,
+                      p_adj_cutoff = 0.05,
+                      Pcap = NULL,
+                      FCcap = NULL,
+                      draw_connector = F,
+                      xrange = NULL,
+                      yrange = NULL){
+  
+  tmp <- subset(starmap_obj,subset = top_level %in% top_level_list & time %in% time_name)
+  tmp <- SetIdent(object = tmp, value  = tmp@meta.data[["group"]])
+  require(tibble)
+  tmp_df <- as.data.frame(AverageExpression(tmp)[[1]]) %>% rownames_to_column()
+  marker_list <- FindMarkers(tmp,ident.1 = "disease",ident.2 = "control",logfc.threshold = 0) %>% rownames_to_column()
+  
+  tmp_df <- left_join(marker_list,tmp_df,by = "rowname")
+  require(EnhancedVolcano)
+  if(!is.null(Pcap)) marker_list$p_val_adj[marker_list$p_val_adj < Pcap] <- Pcap
+  if(!is.null(FCcap)){
+    marker_list$avg_logFC[marker_list$avg_logFC > FCcap] <- FCcap
+    marker_list$avg_logFC[marker_list$avg_logFC < -FCcap] <- -FCcap
+  }
+  tmp_col <- ifelse(marker_list$p_val_adj>p_adj_cutoff,"grey",
+                    ifelse(abs(marker_list$avg_logFC) < FC_cutoff,
+                           "darkgreen",ifelse(marker_list$avg_logFC < 0, "darkblue", "darkred")))
+  names(tmp_col) <-row.names(marker_list)
+  tmp_plot <- EnhancedVolcano(marker_list,
+                              lab = marker_list$rowname,
+                              x="avg_logFC",y="p_val_adj",
+                              title = paste(top_level_list[1],"Disease vs. Control"),
+                              subtitle = " ",
+                              xlim = ifelse(c(is.null(xrange),is.null(xrange)),
+                                            c(-max(abs(marker_list$avg_logFC)) - 0.1,
+                                              max(abs(marker_list$avg_logFC)) + 0.1), xrange),
+                              ylim = ifelse(c(is.null(yrange),is.null(yrange)),
+                                            c(0, max(-log10(marker_list$p_val_adj), na.rm=TRUE) + 0.1)
+                                            ,yrange),
+                              FCcutoff = FC_cutoff,pCutoff = p_adj_cutoff,
+                              colCustom = tmp_col,
+                              #Disable caption, grid and lines
+                              caption = "",
+                              captionLabSize = 0,
+                              legendPosition = "none",
+                              gridlines.major = F,
+                              gridlines.minor = F,
+                              drawConnectors = draw_connector,
+                              widthConnectors = 0.5,
+                              endsConnectors = 'none',
+                              colConnectors = 'grey50',
+                              arrowhead = F,
+                              shape = 16,
+                              pointSize = 1.5,
+                              colAlpha = 0.9)
+
+  return(tmp_plot)
 }
 #####Function Definition: Pseudo-time Analysis#####
 psdtime_analysis <- function(starmap_obj,
@@ -540,48 +621,120 @@ ad_distr_fig_export_regional <- function(starmap_obj,
                                 sample_name, 
                                 cell_type_list, 
                                 cell_type_palette_list, 
-                                scale_max = c("Micro"=1,"Astro"=0.2,"Oligo"=0.4, "Ex"=0.6,"Inhi"=0.15)){#M,A,O,Ex,Inhi
+                                scale_max = c("Micro"=1,"Astro"=0.2,"Oligo"=0.9, "Ex"=0.6,"Inhi"=0.15, "CADG" = 0.6),
+                                scale_density_max = NULL){#M,A,O,Ex,Inhi 
   pdf(file = paste(sample_name,"cell_distr_fig.pdf",sep = "_"),width = 12,height = 9)
   plot_list <- list()
   #Top Level
   print(starmap_obj@misc[[paste(sample_name,"plaque_Cortex",sep = "_")]][[paste(sample_name,"t_l_d_plotlist",sep="_")]][[3]] + 
     labs(title = paste(sample_name,"Cortex Percentage")))
-  print(starmap_obj@misc[[paste(sample_name,"plaque_Sub-cortical",sep = "_")]][[paste(sample_name,"t_l_d_plotlist",sep="_")]][[3]] + 
-    labs(title = paste(sample_name,"Sub-cortical Percentage")))
+  print(starmap_obj@misc[[paste(sample_name,"plaque_Hippocampus",sep = "_")]][[paste(sample_name,"t_l_d_plotlist",sep="_")]][[3]] + 
+    labs(title = paste(sample_name,"Hippocampus Percentage")))
+  print(starmap_obj@misc[[paste(sample_name,"plaque_White Matter",sep = "_")]][[paste(sample_name,"t_l_d_plotlist",sep="_")]][[3]] + 
+          labs(title = paste(sample_name,"White Matter Percentage")))
+  
+  print(starmap_obj@misc[[paste(sample_name,"plaque_Cortex",sep = "_")]][[paste(sample_name,"t_l_d_plotlist",sep="_")]][[2]] + 
+          labs(title = paste(sample_name,"Cortex Density")))
+  print(starmap_obj@misc[[paste(sample_name,"plaque_Hippocampus",sep = "_")]][[paste(sample_name,"t_l_d_plotlist",sep="_")]][[2]] + 
+          labs(title = paste(sample_name,"Hippocampus Density")))
+  print(starmap_obj@misc[[paste(sample_name,"plaque_White Matter",sep = "_")]][[paste(sample_name,"t_l_d_plotlist",sep="_")]][[2]] + 
+          labs(title = paste(sample_name,"White Matter Density")))
+  dev.off()
+  tmp_get_img_size <- function(region, region_img){
+    img_size <- 0
+    if(region == "all"){
+      img_size <- dim(region_img)[1] * dim(region_img)[2]
+    }else if(region == "Sub-cortical"){
+      img_size <- sum(region_img == 2) + 
+        sum(region_img == 3)
+    }else{
+      x <- switch(region,
+                  "Cortex" = 1,"White Matter" = 2, "Hippocampus" = 3)
+      img_size <- sum(region_img == x)
+    }
 
+    return(img_size)
+  }
+  
+  
+  region_img <- starmap_obj@misc[[paste(sample_name,"morph",sep = "_")]][["region"]]
+  area_vec_c = starmap_obj@misc[[paste(sample_name,"plaque_Cortex",sep = "_")]][[paste(sample_name,"plaque_dilate_area",sep = "_")]]
+  area_vec_wm = starmap_obj@misc[[paste(sample_name,"plaque_White Matter",sep = "_")]][[paste(sample_name,"plaque_dilate_area",sep = "_")]]
+  area_vec_h = starmap_obj@misc[[paste(sample_name,"plaque_Hippocampus",sep = "_")]][[paste(sample_name,"plaque_dilate_area",sep = "_")]]
   #Sub Cluster
-  for(i in c("Micro","Astro","Ex","Inhi")){
+  for(i in c("Micro","Astro","Ex","Inhi","CADG")){
+    pdf(file = paste(sample_name,i,"cell_distr_fig.pdf",sep = "_"),width = 12,height = 9)
     palette_list <- cell_type_palette_list[[i]]
     names(palette_list) <- cell_type_list[[i]]
     print(ad_hl_cell_distr(starmap_obj@misc[[paste(sample_name,"plaque_Cortex",sep = "_")]][[paste(sample_name,"cell_meta",sep = "_")]]$min_border_dist,
-                     starmap_obj@misc[[paste(sample_name,"plaque_Cortex",sep = "_")]][[paste(sample_name,"cell_meta",sep = "_")]]$cell_type,
-                     palette_list = palette_list,
-                     scale = "percentage",title = paste(sample_name,i,"Cortex"),y_min = 0,y_max = scale_max[[i]]))
+                           starmap_obj@misc[[paste(sample_name,"plaque_Cortex",sep = "_")]][[paste(sample_name,"cell_meta",sep = "_")]]$cell_type,
+                           palette_list = palette_list,
+                           scale = "percentage",title = paste(sample_name,i,"Cortex Percentage"),y_min = 0,y_max = scale_max[[i]]))
+    print(ad_plot_cell_distr(starmap_obj@misc[[paste(sample_name,"plaque_Cortex",sep = "_")]][[paste(sample_name,"cell_meta",sep = "_")]]$min_border_dist,
+                           starmap_obj@misc[[paste(sample_name,"plaque_Cortex",sep = "_")]][[paste(sample_name,"cell_meta",sep = "_")]]$cell_type,
+                           palette_list = palette_list, area_vec = area_vec_c,img_size = tmp_get_img_size("Cortex",region_img),
+                           scale = "density",title = paste(sample_name,i,"Cortex Density")))
     
-    print(ad_hl_cell_distr(starmap_obj@misc[[paste(sample_name,"plaque_Sub-cortical",sep = "_")]][[paste(sample_name,"cell_meta",sep = "_")]]$min_border_dist,
-                     starmap_obj@misc[[paste(sample_name,"plaque_Sub-cortical",sep = "_")]][[paste(sample_name,"cell_meta",sep = "_")]]$cell_type,
-                     palette_list = palette_list,
-                     scale = "percentage",title = paste(sample_name,i,"Sub-cortical"),y_min = 0,y_max = scale_max[[i]]))
+    print(ad_hl_cell_distr(starmap_obj@misc[[paste(sample_name,"plaque_White Matter",sep = "_")]][[paste(sample_name,"cell_meta",sep = "_")]]$min_border_dist,
+                           starmap_obj@misc[[paste(sample_name,"plaque_White Matter",sep = "_")]][[paste(sample_name,"cell_meta",sep = "_")]]$cell_type,
+                           palette_list = palette_list,
+                           scale = "percentage",title = paste(sample_name,i,"White Matter Percentage"),y_min = 0,y_max = scale_max[[i]]))
+    print(ad_plot_cell_distr(starmap_obj@misc[[paste(sample_name,"plaque_White Matter",sep = "_")]][[paste(sample_name,"cell_meta",sep = "_")]]$min_border_dist,
+                           starmap_obj@misc[[paste(sample_name,"plaque_White Matter",sep = "_")]][[paste(sample_name,"cell_meta",sep = "_")]]$cell_type,
+                           palette_list = palette_list, area_vec = area_vec_wm,img_size = tmp_get_img_size("White Matter",region_img),
+                           scale = "density",title = paste(sample_name,i,"White Matter Density")))
+    
+    print(ad_hl_cell_distr(starmap_obj@misc[[paste(sample_name,"plaque_Hippocampus",sep = "_")]][[paste(sample_name,"cell_meta",sep = "_")]]$min_border_dist,
+                           starmap_obj@misc[[paste(sample_name,"plaque_Hippocampus",sep = "_")]][[paste(sample_name,"cell_meta",sep = "_")]]$cell_type,
+                           palette_list = palette_list,
+                           scale = "percentage",title = paste(sample_name,i,"Hippocampus Percentage"),y_min = 0,y_max = scale_max[[i]]))
+    print(ad_plot_cell_distr(starmap_obj@misc[[paste(sample_name,"plaque_Hippocampus",sep = "_")]][[paste(sample_name,"cell_meta",sep = "_")]]$min_border_dist,
+                           starmap_obj@misc[[paste(sample_name,"plaque_Hippocampus",sep = "_")]][[paste(sample_name,"cell_meta",sep = "_")]]$cell_type,
+                           palette_list = palette_list, area_vec = area_vec_h,img_size = tmp_get_img_size("Hippocampus",region_img),
+                           scale = "density",title = paste(sample_name,i,"Hippocampus Density")))
+    
+    dev.off()
   }
   
   #OPC/Oligo
+  pdf(file = paste(sample_name,"OPC_n_Oligo","cell_distr_fig.pdf",sep = "_"),width = 12,height = 9)
   palette_list <- cell_type_palette_list$Oligo
   names(palette_list) <- cell_type_list$Oligo
   tmp_df <- data.frame(min_border_dist = starmap_obj@misc[[paste(sample_name,"plaque_Cortex",sep = "_")]][[paste(sample_name,"cell_meta",sep = "_")]]$min_border_dist,
                        cell_type =       starmap_obj@misc[[paste(sample_name,"plaque_Cortex",sep = "_")]][[paste(sample_name,"cell_meta",sep = "_")]]$cell_type)
   tmp_df$cell_type[tmp_df$cell_type %in% cell_type_list$OPC] <- "OPC" 
   print(ad_hl_cell_distr(tmp_df$min_border_dist,
-                   tmp_df$cell_type,
-                   palette_list = palette_list,
-                   scale = "percentage",title = paste(sample_name,"Oligo/OPC","Cortex"),y_min = 0,y_max = scale_max[["Oligo"]]))
+                         tmp_df$cell_type,
+                         palette_list = palette_list,
+                         scale = "percentage",title = paste(sample_name,"Oligo/OPC","Cortex Percentage"),y_min = 0,y_max = scale_max[["Oligo"]]))
+  print(ad_plot_cell_distr(tmp_df$min_border_dist,
+                         tmp_df$cell_type,
+                         palette_list = palette_list, area_vec = area_vec_c,img_size = tmp_get_img_size("Cortex",region_img),
+                         scale = "density",title = paste(sample_name,"Oligo/OPC","Cortex Density")))
   
-  tmp_df <- data.frame(min_border_dist = starmap_obj@misc[[paste(sample_name,"plaque_Sub-cortical",sep = "_")]][[paste(sample_name,"cell_meta",sep = "_")]]$min_border_dist,
-                       cell_type =       starmap_obj@misc[[paste(sample_name,"plaque_Sub-cortical",sep = "_")]][[paste(sample_name,"cell_meta",sep = "_")]]$cell_type)
+  tmp_df <- data.frame(min_border_dist = starmap_obj@misc[[paste(sample_name,"plaque_White Matter",sep = "_")]][[paste(sample_name,"cell_meta",sep = "_")]]$min_border_dist,
+                       cell_type =       starmap_obj@misc[[paste(sample_name,"plaque_White Matter",sep = "_")]][[paste(sample_name,"cell_meta",sep = "_")]]$cell_type)
   tmp_df$cell_type[tmp_df$cell_type %in% cell_type_list$OPC] <- "OPC" 
   print(ad_hl_cell_distr(tmp_df$min_border_dist,
                          tmp_df$cell_type,
                          palette_list = palette_list,
-                         scale = "percentage",title = paste(sample_name,"Oligo/OPC","Sub-cortical"), y_min = 0,y_max = scale_max[["Oligo"]]))
+                         scale = "percentage",title = paste(sample_name,"Oligo/OPC","White Matter Percentage"), y_min = 0,y_max = scale_max[["Oligo"]]))
+  print(ad_plot_cell_distr(tmp_df$min_border_dist,
+                         tmp_df$cell_type,
+                         palette_list = palette_list, area_vec = area_vec_wm,img_size = tmp_get_img_size("White Matter",region_img),
+                         scale = "density",title = paste(sample_name,"Oligo/OPC","White Matter Density")))
+  
+  tmp_df <- data.frame(min_border_dist = starmap_obj@misc[[paste(sample_name,"plaque_Hippocampus",sep = "_")]][[paste(sample_name,"cell_meta",sep = "_")]]$min_border_dist,
+                       cell_type =       starmap_obj@misc[[paste(sample_name,"plaque_Hippocampus",sep = "_")]][[paste(sample_name,"cell_meta",sep = "_")]]$cell_type)
+  tmp_df$cell_type[tmp_df$cell_type %in% cell_type_list$OPC] <- "OPC" 
+  print(ad_hl_cell_distr(tmp_df$min_border_dist,
+                         tmp_df$cell_type,
+                         palette_list = palette_list,
+                         scale = "percentage",title = paste(sample_name,"Oligo/OPC","Hippocampus Percentage"), y_min = 0,y_max = scale_max[["Oligo"]]))
+  print(ad_plot_cell_distr(tmp_df$min_border_dist,
+                         tmp_df$cell_type,
+                         palette_list = palette_list, area_vec = area_vec_h,img_size = tmp_get_img_size("Hippocampus",region_img),
+                         scale = "density",title = paste(sample_name,"Oligo/OPC","Hippocampus Density")))
   dev.off()
 }
 
