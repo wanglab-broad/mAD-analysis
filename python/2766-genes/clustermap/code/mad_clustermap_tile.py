@@ -31,7 +31,7 @@ start = timeit.default_timer()
 # %%
 ### set file folder
 ppath = '/stanley/WangLab/Data/Processed/2022-01-03-Hu-AD_8m_Rep/output/max/'
-dpath = '/stanley/WangLab/Data/Processed/2022-01-03-Hu-AD_8m_Rep/round1/'
+dpath = '/stanley/WangLab/Data/Processed/2022-01-03-Hu-AD_8m_Rep/output/max/pi/'
 opath = '/stanley/WangLab/Data/Processed/2022-01-03-Hu-AD_8m_Rep/output/clustermap/'
 
 if not os.path.exists(opath):
@@ -42,22 +42,22 @@ xy_radius = 50 # for knn radius (only)?
 z_radius = 10
 pct_filter = 0.1
 dapi_grid_interval = 5
-min_spot_per_cell = 5
+min_spot_per_cell = 10
 cell_num_threshold = 0.02
 window_size = 512
 
 # %%
 ### read dapi: col, row, z
-dapi = tifffile.imread(os.path.join(dpath, tile, '*ch04.tif'))
+dapi = tifffile.imread(os.path.join(dpath, f"{tile}.tif"))
 dapi = np.transpose(dapi, (1,2,0))
 
 ### read spots
 mat = scipy.io.loadmat(os.path.join(ppath, tile, 'goodPoints_max3d.mat'))
-spots = pd.DataFrame(mat['goodSpots'])
+spots = pd.DataFrame(mat['tile_goodSpots'])
 spots.columns=['spot_location_1','spot_location_2','spot_location_3']
 
 ### convert gene_name to gene identity
-gene_name = list(x[0][0] for x in mat['goodReads'])
+gene_name = list(x[0][0] for x in mat['tile_goodReads'])
 le = preprocessing.LabelEncoder()
 le.fit(gene_name)
 gene = le.transform(gene_name) + 1 #minimal value of gene=1
