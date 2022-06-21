@@ -1,14 +1,18 @@
 ad_D_vs_C_DE <- function(starmap_obj,
-                         top_level_list,
+                         cell_type_list,
                          time_name,
                          p_cutoff = 0.05,
-                         logfc_cutoff = 0.1){
-  
-  tmp <- subset(starmap_obj,subset = top_level %in% top_level_list & time %in% time_name)
+                         logfc_cutoff = 0.1, sub_type = F){
+  if(sub_type){
+    tmp <- subset(starmap_obj,subset = cell_type %in% cell_type_list & time %in% time_name)
+  }else{
+    tmp <- subset(starmap_obj,subset = top_level %in% cell_type_list & time %in% time_name)
+  }
+ 
   tmp <- SetIdent(object = tmp, value  = tmp@meta.data[["group"]])
   require(tibble)
   tmp_df <- as.data.frame(AverageExpression(tmp)[[1]]) %>% rownames_to_column()
-  marker_list <- FindMarkers(tmp,ident.1 = "disease",ident.2 = "control",logfc.threshold = logfc_cutoff) %>% rownames_to_column()
+  marker_list <- FindMarkers(tmp,ident.1 = "disease",ident.2 = "control",logfc.threshold = logfc_cutoff,min.pct = 0.05) %>% rownames_to_column()
   marker_list <- marker_list[marker_list$p_val < p_cutoff ,]
   #write.csv(marker_list,paste("disease_vs_ctrl",top_level_list[i],".csv",sep = "_"),row.names = T)
   return(marker_list)
@@ -30,7 +34,7 @@ ad_D_vs_C_DE_volcano <- function(starmap_obj,
   tmp <- SetIdent(object = tmp, value  = tmp@meta.data[["group"]])
   require(tibble)
   tmp_df <- as.data.frame(AverageExpression(tmp)[[1]]) %>% rownames_to_column()
-  marker_list <- FindMarkers(tmp,ident.1 = "disease",ident.2 = "control",logfc.threshold = 0) %>% rownames_to_column()
+  marker_list <- FindMarkers(tmp,ident.1 = "disease",ident.2 = "control",logfc.threshold = 0, min.pct = 0.05) %>% rownames_to_column()
   
   tmp_df <- left_join(marker_list,tmp_df,by = "rowname")
   require(EnhancedVolcano)
@@ -49,7 +53,7 @@ ad_D_vs_C_DE_volcano <- function(starmap_obj,
   tmp_plot <- EnhancedVolcano(marker_list,
                               lab = marker_list$rowname,
                               x="avg_logFC",y="p_val",
-                              title = paste(top_level_list[1],time_name,"Disease vs. Control"),
+                              title = paste(fig_title,time_name,"Disease vs. Control"),
                               subtitle = " ",
                               xlim = ifelse(c(is.null(xrange),is.null(xrange)),
                                             c(-max(abs(marker_list$avg_logFC)) - 0.1,
