@@ -1,4 +1,4 @@
-#####Function Definition: preprocess and min_dist calc#####
+#####Function Definition: preprocess and calc cell interval#####
 #TEST
 #starmap_obj       <- starmap_raw
 #img_list          <- starmap_obj@misc$ADmouse_9494_morph

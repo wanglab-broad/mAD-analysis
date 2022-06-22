@@ -25,7 +25,7 @@ source("func/AD_Pseudo-timeFunction.R")
 #Load Scaled Data
 ad_ini()
 scale_ratio = 0.3 #
-res_factor = 0.3 #resolution factor
+res_factor = 3.3 #resolution factor
 
 starmap_raw <- LoadH5Seurat("~/Desktop/At_Broad/AD/data/2022-03-31-Hu-AD-stardist-scaled.h5seurat")
 starmap_64  <- LoadH5Seurat("~/Desktop/At_Broad/AD/data/2021-04-22-starmap-mAD-64-genes-raw.h5seurat")
@@ -92,25 +92,19 @@ starmap_raw <- ad_calc_plaque_dist2(starmap_raw,starmap_raw@misc[["ADmouse_11346
 starmap_raw <- ad_calc_plaque_dist2(starmap_raw,starmap_raw@misc[["ADmouse_11346_morph"]], 400, "ADmouse_11346", top_level_palette_list, "Hippocampus")
 starmap_raw <- ad_calc_plaque_dist2(starmap_raw,starmap_raw@misc[["ADmouse_9723_2_morph"]], 400, "ADmouse_9723_2", top_level_palette_list, "Cortex")
 starmap_raw <- ad_calc_plaque_dist2(starmap_raw,starmap_raw@misc[["ADmouse_9723_2_morph"]], 400, "ADmouse_9723_2", top_level_palette_list, "Hippocampus")
-
-starmap_raw <- ad_calc_plaque_dist(starmap_raw,starmap_raw@misc[["ADmouse_9494_morph"]], 400, "ADmouse_9494", top_level_palette_list, "Corpus Callosum")
-starmap_raw <- ad_calc_plaque_dist(starmap_raw,starmap_raw@misc[["ADmouse_11346_morph"]], 400, "ADmouse_11346", top_level_palette_list, "Corpus Callosum")
-starmap_raw <- ad_calc_plaque_dist(starmap_raw,starmap_raw@misc[["ADmouse_9723_morph"]], 400, "ADmouse_9723", top_level_palette_list, "Corpus Callosum")
-starmap_raw <- ad_calc_plaque_dist(starmap_raw,starmap_raw@misc[["ADmouse_9723_2_morph"]], 400, "ADmouse_9723_2", top_level_palette_list, "Corpus Callosum")
-
 ```
 
 ## Stacked Barplot
+
 This block is used for export stacked bar-plot of cell-type density around plauqes 
 
 ```{r}
-#Cortex 
+#Top Level
 sample_list <- c('ADmouse_9723','ADmouse_9494','ADmouse_9723_2','ADmouse_11346')
 plot_list <- list()
 
 for(area_name in c("Cortex","Hippocampus","all")){
   for(i in 1:2){
-    
     cell_meta <- rbind(starmap_raw@misc[[paste(sep = "_",sample_list[i],"plaque",area_name)]][[paste(sep = "_",sample_list[i],"cell_meta")]],
                        starmap_raw@misc[[paste(sep = "_",sample_list[i+2],"plaque",area_name)]][[paste(sep = "_",sample_list[i+2],"cell_meta")]])
     if(area_name == "Cortex"){
@@ -134,7 +128,7 @@ for(area_name in c("Cortex","Hippocampus","all")){
                                             starmap_raw@misc[[paste(sep = "_",sample_list[i+2],"plaque",area_name)]][[paste(sep = "_",sample_list[i+2],"plaque_dilate_area")]], img_size = j)
   }
 }
-
+#Subtype
 for(j in c("Micro","Astro","Oligo","Ex","Inhi","CADG")){
   for(area_name in c("Cortex","Hippocampus","all")){
     for(i in 1:2){
@@ -163,138 +157,64 @@ for(j in c("Micro","Astro","Oligo","Ex","Inhi","CADG")){
   
 }
 
-pdf(file = "May27_cell_type_density.pdf", width = 24,height = 12)
+pdf(file = "Jun22_cell_type_density.pdf", width = 24,height = 12)
 ggarrange(plotlist = plot_list,ncol = 3, nrow = 2) %>% print()
 dev.off()
-
-#Cell Type stacked bar plot 
-for(i in 1:2){
-  cell_meta <- rbind(starmap_raw@misc[[paste(sep = "_",sample_list[i],"plaque","all")]][[paste(sep = "_",sample_list[i],"cell_meta")]],
-                     starmap_raw@misc[[paste(sep = "_",sample_list[i+2],"plaque","all")]][[paste(sep = "_",sample_list[i+2],"cell_meta")]])
-  cell_meta <- subset(cell_meta, interval %in% c("10um","20um","30um","40um") & 
-                        cell_type %in% c(cell_type_list$Ex,cell_type_list$CADG,cell_type_list$Inhi,
-                                         "Astro3","Micro3","Oligo2","Oligo3","OPC"))
-  cell_meta$cell_type <- as.character(cell_meta$cell_type)
-  cell_meta$cell_type[cell_meta$cell_type %in% c(cell_type_list$Ex,cell_type_list$CADG,cell_type_list$Inhi)] <- "Neuron"
-  cell_meta$cell_type[cell_meta$cell_type %in% c("Oligo2","Oligo3")] <- "Oligo2/3"
-  
-  palette_list <- c(cell_type_palette_list$Micro[3],
-                    cell_type_palette_list$Astro[3],
-                    "Oligo2/3" = "#BA4D9B",
-                    cell_type_palette_list$Oligo[4],
-                    "Neuron" = "#999999")
-  cell_meta$cell_type <- factor(cell_meta$cell_type,levels = c("Astro3","Micro3","Oligo2/3","OPC","Neuron"))
-  cell_meta <- cell_meta %>% group_by(interval,cell_type) %>% summarise(count = n())
-  for(j in 1:4){
-      k = (starmap_raw@misc[[paste0(sample_list[i+2],"_plaque_all")]][[paste0(sample_list[i+2],"_plaque_dilate_area")]][j] + 
-    starmap_raw@misc[[paste0(sample_list[i],"_plaque_all")]][[paste0(sample_list[i],"_plaque_dilate_area")]][j])/2
-    cell_meta$count[cell_meta$interval == paste0(j,"0um")] <- cell_meta$count[cell_meta$interval == paste0(j,"0um")]/k*1000000
-  }
-  
-  plot_list[[i]] <- ggplot(data= cell_meta, aes(x = interval,y=count, fill = cell_type)) + 
-    geom_bar(stat = "identity") +
-    facet_grid(cell_type~., scales = "free_y", switch = "y") +
-    theme(legend.position = "none", panel.spacing = unit(0, "lines"),
-          plot.title = element_text(hjust = 0.5),
-          strip.background = element_blank(),
-          strip.text = element_text(face = "bold"),
-          strip.text.y.left = element_text(angle = 0),
-          panel.border = element_blank(),
-          panel.grid.major = element_blank(),
-          panel.grid.minor = element_blank()) + 
-    scale_fill_manual(values = palette_list) + 
-    labs(title = paste(sample_list[i],sample_list[i+2]))
-}
-
-#Fig5 Oligo 
-
-cell_meta <- subset(starmap_raw@meta.data, cell_type %in% c("Oligo1","Oligo2","Oligo3","OPC") & region == "Alveus")
-cell_meta$group <- paste(cell_meta$group,cell_meta$time,sep = "_")
-tmp_df <- cell_meta %>% group_by(group,cell_type) %>% summarise(count = n())
-
-tmp_vec <- c("control_13months" = sum(starmap_raw@misc$ADmouse_9498_morph$region == 3) +
-               sum(starmap_raw@misc$ADmouse_11351_morph$region == 3),
-             "control_8months" = sum(starmap_raw@misc$ADmouse_9735_morph$region == 3) +
-               sum(starmap_raw@misc$ADmouse_9707_morph$region == 3),
-             "disease_13months" = sum(starmap_raw@misc$ADmouse_9494_morph$region == 3) +
-               sum(starmap_raw@misc$ADmouse_11346_morph$region == 3),
-             "disease_8months" = sum(starmap_raw@misc$ADmouse_9723_morph$region == 3) +
-               sum(starmap_raw@misc$ADmouse_9723_2_morph$region == 3))
-
-for(i in levels(as.factor(cell_meta$group))){
-  tmp_df$count[tmp_df$group == i] <- tmp_df$count[tmp_df$group == i]/tmp_vec[[i]]*1000000*3.3^2
-}
-
-tmp_df$group <- factor(tmp_df$group,levels = c("control_8months", "disease_8months",
-                                               "control_13months", "disease_13months"))
-
-ggplot(data = tmp_df,aes(x= group, y=count, fill=cell_type))+
-  geom_bar(stat="identity") + 
-  labs(title = "Oligo") +
-  theme_classic() + 
-  theme(axis.text.x = element_text(angle = 45,hjust = 1)) +
-  scale_fill_manual(values = cell_type_palette_list$Oligo)
-
 
 
 ```
 
 ```{r Fig7 Ridge}
-j = "13mo"
-if(j == "8mo"){
-  tmp_df  <- rbind(starmap_raw@misc$ADmouse_9723_plaque_all$ADmouse_9723_cell_meta,
-                 starmap_raw@misc$ADmouse_9723_2_plaque_all$ADmouse_9723_2_cell_meta)  
-}else if(j == "13mo"){
-  tmp_df  <- rbind(starmap_raw@misc$ADmouse_9494_plaque_all$ADmouse_9494_cell_meta,
-                 starmap_raw@misc$ADmouse_11346_plaque_all$ADmouse_11346_cell_meta)  
-}
-tmp_df <- rbind(tmp_df,tmp_df %>% mutate(interval = "overall"))
-tmp_df <- tmp_df %>%  group_by(cell_type,top_level,interval) %>%
-  summarise(time = n()) %>% subset((cell_type %in% c("Astro3","Micro3","Oligo2","Oligo3","OPC") |
-                                      top_level %in% c("CTX-Ex","CA1","CA2","CA3","DG","Inh")) & 
-                                      interval %in% c("10um","20um","30um","40um","overall"))
-if(j == "13mo"){
-  tmp_vec <- c(starmap_raw@misc$ADmouse_9494_plaque_all$ADmouse_9494_plaque_dilate_area+
-                starmap_raw@misc$ADmouse_11346_plaque_all$ADmouse_11346_plaque_dilate_area,
-             "overall" = ad_area(dim(starmap_raw@misc$ADmouse_9494_plaque_all$ADmouse_9494_plaque_img))+
-               ad_area(dim(starmap_raw@misc$ADmouse_11346_plaque_all$ADmouse_11346_plaque_img))) 
-}else if(j == "8mo"){
-  tmp_vec <- c(starmap_raw@misc$ADmouse_9723_plaque_all$ADmouse_9723_plaque_dilate_area+
-                starmap_raw@misc$ADmouse_9723_2_plaque_all$ADmouse_9723_2_plaque_dilate_area,
-             "overall" = ad_area(dim(starmap_raw@misc$ADmouse_9723_plaque_all$ADmouse_9723_plaque_img))+
-               ad_area(dim(starmap_raw@misc$ADmouse_9723_2_plaque_all$ADmouse_9723_2_plaque_img))) 
-}
-
-
-
-tmp_df$top_level <- as.character(tmp_df$top_level)
-tmp_df$top_level[tmp_df$top_level%in% c("CTX-Ex","CA1","CA2","CA3","DG","Inh")] <- "Neuron"
-
-tmp_df <- tmp_df %>% group_by(top_level, interval) %>% summarise(dens = sum(time))
-
-for(i in 1:4){
-  tmp_df$dens[tmp_df$interval == paste0(i,"0um")] <- tmp_df$dens[tmp_df$interval == paste0(i,"0um")]/
-    tmp_vec[[paste0(i,"0um")]] * 3.3^2 * 1000000
-}
-tmp_df$dens[tmp_df$interval == "overall"] <- tmp_df$dens[tmp_df$interval == "overall"]/
-    tmp_vec[["overall"]] * 3.3^2 * 1000000
-
 plot_list <- list()
-
-
-
-for(i in 1:5){
-  plot_list[[i]] <- ggplot(tmp_df[tmp_df$top_level == c("Micro","Astro","Oligo","OPC","Neuron")[i],], 
-                           aes(x = interval, y=dens)) + # the fill argument sets the color for the bars
- geom_col(show.legend = F,fill = c("#fcb900","#29e322","#8600d4","#c800cc","#aaaaaa")[i]) +
-    labs(title = c("DAM","DAA","Oligo2/3","OPC","Neuron")[i])+
-    ylim(0,c(1300,100,130,100,1600)[i])+
-    labs(title = paste(j,c("Micro","Astro","Oligo","OPC","Neuron")[i])) + 
- #scale_fill_manual(values = c("#fcb900","#29e322","#8600d4","#c800cc","#aaaaaa")) +
- theme_classic() 
+for(j in c("8mo","13mo")){
+  if(j == "8mo"){
+    tmp_df  <- rbind(starmap_raw@misc$ADmouse_9723_plaque_all$ADmouse_9723_cell_meta,
+                   starmap_raw@misc$ADmouse_9723_2_plaque_all$ADmouse_9723_2_cell_meta)  
+  }else if(j == "13mo"){
+    tmp_df  <- rbind(starmap_raw@misc$ADmouse_9494_plaque_all$ADmouse_9494_cell_meta,
+                   starmap_raw@misc$ADmouse_11346_plaque_all$ADmouse_11346_cell_meta)  
+  }
+  tmp_df <- rbind(tmp_df,tmp_df %>% mutate(interval = "overall"))
+  tmp_df <- tmp_df %>%  group_by(cell_type,top_level,interval) %>%
+    summarise(time = n()) %>% subset((cell_type %in% c("Astro3","Micro3","Oligo2","Oligo3","OPC") |
+                                        top_level %in% c("CTX-Ex","CA1","CA2","CA3","DG","Inh")) & 
+                                        interval %in% c("10um","20um","30um","40um","overall"))
+  if(j == "13mo"){
+    tmp_vec <- c(starmap_raw@misc$ADmouse_9494_plaque_all$ADmouse_9494_plaque_dilate_area+
+                  starmap_raw@misc$ADmouse_11346_plaque_all$ADmouse_11346_plaque_dilate_area,
+               "overall" = ad_area(dim(starmap_raw@misc$ADmouse_9494_plaque_all$ADmouse_9494_plaque_img))+
+                 ad_area(dim(starmap_raw@misc$ADmouse_11346_plaque_all$ADmouse_11346_plaque_img))) 
+  }else if(j == "8mo"){
+    tmp_vec <- c(starmap_raw@misc$ADmouse_9723_plaque_all$ADmouse_9723_plaque_dilate_area+
+                  starmap_raw@misc$ADmouse_9723_2_plaque_all$ADmouse_9723_2_plaque_dilate_area,
+               "overall" = ad_area(dim(starmap_raw@misc$ADmouse_9723_plaque_all$ADmouse_9723_plaque_img))+
+                 ad_area(dim(starmap_raw@misc$ADmouse_9723_2_plaque_all$ADmouse_9723_2_plaque_img))) 
+  }
+  tmp_df$top_level <- as.character(tmp_df$top_level)
+  tmp_df$top_level[tmp_df$top_level%in% c("CTX-Ex","CA1","CA2","CA3","DG","Inh")] <- "Neuron"
+  
+  tmp_df <- tmp_df %>% group_by(top_level, interval) %>% summarise(dens = sum(time))
+  
+  for(i in 1:4){
+    tmp_df$dens[tmp_df$interval == paste0(i,"0um")] <- tmp_df$dens[tmp_df$interval == paste0(i,"0um")]/
+      tmp_vec[[paste0(i,"0um")]] * res_factor^2 * 1000000
+  }
+  tmp_df$dens[tmp_df$interval == "overall"] <- tmp_df$dens[tmp_df$interval == "overall"]/
+      tmp_vec[["overall"]] * res_factor^2 * 1000000
+  for(i in 1:5){
+    plot_list[[paste0(j,i)]] <- ggplot(tmp_df[tmp_df$top_level == c("Micro","Astro","Oligo","OPC","Neuron")[i],], 
+                             aes(x = interval, y=dens)) + # the fill argument sets the color for the bars
+   geom_col(show.legend = F,fill = c("#fcb900","#29e322","#8600d4","#c800cc","#aaaaaa")[i]) +
+      labs(title = c("DAM","DAA","Oligo2/3","OPC","Neuron")[i])+
+      ylim(0,c(1300,100,130,100,1600)[i])+
+      labs(title = paste(j,c("Micro","Astro","Oligo","OPC","Neuron")[i])) + 
+   #scale_fill_manual(values = c("#fcb900","#29e322","#8600d4","#c800cc","#aaaaaa")) +
+   theme_classic() 
+  }
 }
 
-pdf(file = paste0("Jun08_Fig7_cell_type_density_",j,".pdf"), width = 20,height = 10)
+
+pdf(file = paste0("Jun22_Fig7_cell_type_density.pdf"), width = 20,height = 10)
 ggarrange(plotlist = plot_list,ncol = 3, nrow = 2) %>% print()
 dev.off()
 
@@ -302,161 +222,16 @@ dev.off()
 
 ## Grid Analysis
 
-### Func Def
-
-```{r grid analysis function}
-
-ad_area <- function(dims_array){dims_array[1]*dims_array[2]}
-
-ad_tau_grid_analysis <- function(tau_img,cell_meta,sample_name, 
-                                 block_size, palette_list, level = "top_level", 
-                                 plaque_img = NULL, region_img = NULL){
-  plot_list <- list()
-  tmp_img <- Image(tau_img!=0,colormode = Grayscale)
-  tmp_mat <- matrix(0,nrow = floor(dim(tmp_img)[1] / block_size),
-                    ncol = floor(dim(tmp_img)[2] / block_size))
-  for(i in 1:dim(tmp_mat)[1]){
-    for(j in 1:dim(tmp_mat)[2]){
-      tmp_mat[i,j] <- sum(tmp_img[((i-1)*block_size+1):(i*block_size),((j-1)*block_size+1):(j*block_size)])
-    }
-  }
-  require(ComplexHeatmap)
-  require(circlize)
-  plot_list[["tau_heatmap"]] <- Heatmap(tmp_mat,cluster_rows = F,cluster_columns = F,
-                                        col =  colorRamp2(c(0, quantile(tmp_mat,probs = c(0.99))), 
-                                                          c("white", "darkred")))
-  #Cell Idty Stat
-  cell_stat <- data.frame(x = rep(c(1:dim(tmp_mat)[1]), dim(tmp_mat)[2]),
-                          y = rep(c(1:dim(tmp_mat)[2]), each = dim(tmp_mat)[1]))
-  cell_stat[["tau_level"]] <- apply(cell_stat,1,FUN = function(x){tmp_mat[x[["x"]], x[["y"]] ]})
-  for(i in names(palette_list)){
-    cell_stat[[i]] <- apply(cell_stat,1,
-                            FUN = function(x){
-                              sum(cell_meta$x >= (x[["x"]]-1)*block_size+1 &
-                                    cell_meta$x <= x[["x"]]*block_size &
-                                    cell_meta$y >= (x[["y"]]-1)*block_size+1 &
-                                    cell_meta$y <= x[["y"]]*block_size &
-                                    cell_meta[[level]] == i)
-                              })
-    #print(i)
-  }
-  if(!is.null(region_img)){
-    cell_stat[["region"]] <- apply(cell_stat,1,
-                            FUN = function(x){
-                              region_img[round((x[["x"]]-1/2)*block_size), round((x[["y"]]-1/2)*block_size)]
-                              })
-  }
-  require(reshape2)
-  if(!is.null(plaque_img)){
-    cell_stat[["plaque"]] <- apply(cell_stat,1,
-                                   FUN = function(x){
-                                     return(sum(plaque_img[((x[["x"]]-1)*block_size+1):(x[["x"]]*block_size),
-                                                        ((x[["y"]]-1)*block_size+1):(x[["y"]]*block_size)]))
-                                   })
-    tmp_df <- data.frame(tau_interval = c("0%","50%","100%","100%","100%"),
-                       min_tau = c(0,quantile(cell_stat$tau_level[cell_stat$tau_level != 0])[c(1,3,3,3)]),
-                       max_tau = c(quantile(cell_stat$tau_level[cell_stat$tau_level != 0])[c(1,3)],rep(block_size^2,3)),
-                       plaque = c("any","any","any","with_plaque","without_plaque"))
-    for(i in 1:5){
-      for(j in names(palette_list)){
-        if(tmp_df$plaque[i] == "any"){
-          tmp_df[[j]][i] <- sum(cell_stat[[j]][cell_stat$tau_level >= tmp_df$min_tau[i] &
-                                               cell_stat$tau_level < tmp_df$max_tau[i]])/
-          sum(cell_stat$tau_level >= tmp_df$min_tau[i] & cell_stat$tau_level < tmp_df$max_tau[i])
-        }else if(tmp_df$plaque[i] == "with_plaque"){
-          tmp_df[[j]][i] <- sum(cell_stat[[j]][cell_stat$tau_level >= tmp_df$min_tau[i] &
-                                               cell_stat$tau_level < tmp_df$max_tau[i] & cell_stat$plaque > 0])/
-          sum(cell_stat$tau_level >= tmp_df$min_tau[i] & cell_stat$tau_level < tmp_df$max_tau[i] & cell_stat$plaque > 0)
-        }else if(tmp_df$plaque[i] == "without_plaque"){
-          tmp_df[[j]][i] <- sum(cell_stat[[j]][cell_stat$tau_level >= tmp_df$min_tau[i] &
-                                               cell_stat$tau_level < tmp_df$max_tau[i] & cell_stat$plaque == 0])/
-          sum(cell_stat$tau_level >= tmp_df$min_tau[i] & cell_stat$tau_level < tmp_df$max_tau[i] & cell_stat$plaque == 0)
-        }
-      }
-    }
-    tmp_df_bk <- tmp_df 
-    tmp_df <- tmp_df %>% melt(id.vars = c("tau_interval","min_tau","max_tau","plaque"))
-    tmp_df$tau_interval <- factor(tmp_df$tau_interval, levels = c("0%","50%","100%"))
-    tmp_df$variable <- factor(tmp_df$variable, levels = names(palette_list))
-    tmp_df[["title"]] <- factor(paste(tmp_df$tau_interval,tmp_df$plaque,sep = "_"),
-                                levels = c("0%_any","50%_any","100%_any","100%_with_plaque","100%_without_plaque"))
-    
-    plot_list[["stacked_barplot"]] <-
-    ggplot(data = tmp_df,aes(x = title, y = value, fill = variable, order = variable))+
-      geom_bar(stat="identity") + 
-      ggtitle(paste(sample_name,"Cell Density in Tau Free blocks and 0-25%/.../75-100% quantile blocks with tau")) +
-      scale_fill_manual("",values = palette_list,
-                        breaks = names(palette_list),
-                        labels = names(palette_list)) +
-      theme_classic()
-  
-  }else{
-    #Ridge Barplot
-  tmp_df <- data.frame(tau_interval = c("0%","50%","100%"),
-                       #min_tau = c(0,1,10,29,68),
-                       #max_tau = c(1,10,29,68,999),
-                       min_tau = c(0,quantile(cell_stat$tau_level[cell_stat$tau_level != 0])[c(1,3)]),
-                       max_tau = c(quantile(cell_stat$tau_level[cell_stat$tau_level != 0])[c(1,3)],block_size^2))
-  
-  for(i in 1:3){
-    for(j in names(palette_list)){
-      tmp_df[[j]][i] <- sum(cell_stat[[j]][cell_stat$tau_level >= tmp_df$min_tau[i] &
-                                             cell_stat$tau_level < tmp_df$max_tau[i]])/
-      sum(cell_stat$tau_level >= tmp_df$min_tau[i] & cell_stat$tau_level < tmp_df$max_tau[i])
-    }
-    
-  }
-  tmp_df_bk <- tmp_df 
-  tmp_df <- tmp_df %>% melt(id.vars = c("tau_interval","min_tau","max_tau"))
-  tmp_df$tau_interval <- factor(tmp_df$tau_interval, levels = c("0%","50%","100%"))
-  tmp_df$variable <- factor(tmp_df$variable, levels = names(palette_list))
-  
-  plot_list[["stacked_barplot"]] <-
-    ggplot(data = tmp_df,aes(x = tau_interval, y = value, fill = variable, order = variable))+
-    geom_bar(stat="identity") + 
-    ggtitle(paste(sample_name,"Cell Density in Tau Free blocks and 0-25%/.../75-100% quantile blocks with tau")) +
-    scale_fill_manual("",values = palette_list,
-                      breaks = names(palette_list),
-                      labels = names(palette_list)) +
-    theme_classic()
-  }
-  cell_stat[["tau_group"]] <- apply(cell_stat,1,
-                                    FUN = function(x){
-                                      tau_level <- as.numeric(x[["tau_level"]])
-                                      plaque_level <- as.numeric(x[["plaque"]])
-                                      
-                                      tmp_vec <- quantile(cell_stat$tau_level[cell_stat$tau_level != 0], 
-                                                          probs = c(0,0.5,1))
-                                      if(tau_level < tmp_vec[1]) "Zero"
-                                      else if(tau_level < tmp_vec[2]) "Low"
-                                      else if(tau_level >= tmp_vec[2] & plaque_level == 0) "High w/o ABeta"
-                                      else if(tau_level >= tmp_vec[2] & plaque_level > 0) "High w ABeta"
-                                      else "NA"
-                                    })
-  
-    
-  return(list("plot_list" = plot_list,
-              "cell_stat" = cell_stat,
-              "interval_stat" = tmp_df,
-              "interval_stat_wide" = tmp_df_bk))
-}
-```
+For p-Tau related analysis
 
 ### Run
 
 ```{r}
 #####Run tau grid analysis#####
-cell_meta <- starmap_raw@meta.data %>% subset(subset = sample == "ADmouse_9494")
-sample_name <- "AD_mouse9494"
-block_size = round(20*3.175) #20um
-tau_img <- starmap_raw@misc[["ADmouse_9494_morph"]][["tau"]]
-plaque_img <- starmap_raw@misc$ADmouse_9494_plaque_all$ADmouse_9494_plaque_img
-#region_img <- starmap@misc$AD_mouse9494_morph$region
-palette_list <- top_level_palette_list
+block_size = 64 
+
 #1-Alveus
-require(tiff)
-region_img <- readTIFF(source = "data/2021-06-22-mAD-molecular-labels/2766\ genes/AD_mouse9494-molecular-labels.tif",
-                       indexed = T) %>% t()
+
 tau_res <- list()
 
 tau_res[["AD9494_res"]] <- ad_tau_grid_analysis(starmap_raw@misc[["ADmouse_9494_morph"]][["tau"]],
@@ -475,9 +250,6 @@ tau_res[["AD11346_res"]] <- ad_tau_grid_analysis(starmap_raw@misc[["ADmouse_1134
                                    subset(starmap_raw@meta.data, subset = sample == "ADmouse_11346"), 
                                    "ADmouse_11346", block_size, top_level_palette_list, 
                                    plaque_img = starmap_raw@misc$ADmouse_11346_plaque_all$ADmouse_11346_plaque_img)
-
-
-
 
 #Oligo/OPC subtype
 tau_res[["AD9494_Oligo_res"]] <- ad_tau_grid_analysis(starmap_raw@misc[["ADmouse_9494_morph"]][["tau"]],
@@ -564,21 +336,6 @@ addDataFrame(tmp_df, sheet=sheet, startColumn=8, startRow=15, row.names=T)
 # Stat test for tau
 
 
-ad_tau_stat <- function(cell_stat, cell_type_vec){
-  tmp_df <- data.frame(cell_type = cell_type_vec)
-  for(i in c("Low","High","High w ABeta","High w/o ABeta")){
-  tmp_df[[i]] <- apply(tmp_df,1,
-                       FUN = function(x){
-                         if(i == "High") tmp_vec <- cell_stat[[x[["cell_type"]]]][cell_stat$tau_group %in% c("High w ABeta", "High w/o ABeta")]
-                         else tmp_vec <- cell_stat[[x[["cell_type"]]]][cell_stat$tau_group == i]
-                         tmp_obj <- t.test(x = tmp_vec,
-                                           y = cell_stat[[x[["cell_type"]]]][cell_stat$tau_group == "Zero"],
-                                           alternative = "greater")
-                         tmp_obj$p.value
-                       })
-  }
-  tmp_df
-}
 
 #top level
 sheet <- createSheet(wb, "p-Tau-stat")
@@ -614,26 +371,6 @@ saveWorkbook(wb, "Jun17_p-Tau_cell_composition_stat.xlsx")
 plot_list <- list()
 palette_list <- cell_type_palette_list$Oligo
 palette_list <- top_level_palette_list
-
-
-ad_combined_tau_density <- function(palette_list,stat_1,stat_2,title_text = ""){
-  tmp_df <- data.frame(cell_type = stat_1$variable,
-                     title = stat_1$title,
-                     sample1 = stat_1$value,
-                     sample2 = stat_2$value)
-  tmp_df$average <- (tmp_df$sample1+tmp_df$sample2)/2
-  tmp_df <- tmp_df %>% subset(subset = cell_type != "DG")
-  palette_list <- palette_list[names(palette_list) != "DG"]
-  tmp_df$title <- factor(tmp_df$title,levels = c("0%_any","50%_any","100%_any","100%_with_plaque","100%_without_plaque"))
-  p <-
-    ggplot(data = tmp_df,aes(x = title, y = average, fill = cell_type, order = cell_type))+
-    geom_bar(stat="identity") + 
-    ggtitle(paste("p-Tau Cell Density",title_text)) +
-    scale_fill_manual("",values = palette_list ,
-                      breaks = names(palette_list),
-                      labels = names(palette_list)) +
-    theme_classic()
-}
 
 plot_list[["8mo_overall"]] <- ad_combined_tau_density(top_level_palette_list,
                                                        tau_res$AD9723_res$interval_stat,
@@ -768,7 +505,7 @@ dev.off()
 ```
 
 ## Pseudotime
-
+### monocle3
 ```{r }
 #External Embedding
 embed_ls <- list()
@@ -800,8 +537,13 @@ ggarrange(plotlist = psdtime_res_list[["Astro"]]$Plot_list, ncol = 3, nrow = 1)
 ggarrange(plotlist = psdtime_res_list[["Oligo"]]$Plot_list, ncol = 3, nrow = 1)
 dev.off()
 
-#Draw Figures
-source("~/Desktop/At_Broad/AD/RScript/AD_Pseudo-timeFunction.R")
+```
+
+### Plot
+
+```{r}
+
+#Export  Figures
 
 sample_convert <- function(cell_meta_df){
   cell_meta_df$sample <- apply(cell_meta_df,1,
@@ -819,7 +561,6 @@ sample_convert <- function(cell_meta_df){
   return(cell_meta_df)
 }
 
-setwd("/Users/zhouhaowen/Desktop/At_Broad/AD/Mar02_rerun")
 pdf(file = "F3_Micro_Pseudotime.pdf",width = 4,height = 3,useDingbats = FALSE)
 cell_meta <- sample_convert(psdtime_res_list[["Micro"]][["cell_meta"]])
 ad_psdtime_highlight(cell_meta, "sample",    psdtime_res_list[["Micro"]][["cds"]], T, "Micro") %>% print()
@@ -968,10 +709,6 @@ for(i in 1:5){
 }
 
 
-
-library(factoextra)
-#fviz_nbclust(t(scale(t(as.matrix(expr_df[,3:7])))),kmeans,k.max = 15,method = "wss")
-
 seq_num <- 6
 set.seed(2021)
 tmp_df.km_res <- kmeans(t(scale(t(as.matrix(expr_df[,3:7])))), seq_num, nstart = 25, iter.max = 100)
@@ -982,23 +719,6 @@ for(i in 1:seq_num){
 }
 names(max_int_vec) <- as.character(1:seq_num)
 
-#Visualization
-library(umap)
-tmp_df <- data.frame(expr_df,cluster = tmp_df.km_res$cluster)
-tmp_df.pca <- prcomp(t(tmp_df[,8:17]), rank. = 3)
-custom.config = umap.defaults
-custom.config$n_neighbors = 15
-tmp_df.umap <- umap(tmp_df[,8:17], config = custom.config)
-
-pdf("Apr17_gene_cl_pca.pdf",width = 6, height = 6)
-ggplot(data = data.frame(as.matrix(tmp_df[,8:17]) %*% tmp_df.pca$x, group = tmp_df$group, cl = as.factor(tmp_df$cluster)),
-       aes(x = PC1, y = PC2, color = group)) + 
-  geom_point() + theme_classic() + xlim(-10,10) + ylim(-10,10)
-
-ggplot(data = data.frame(as.matrix(tmp_df[,8:17]) %*% tmp_df.pca$x, group = tmp_df$group, cl = as.factor(tmp_df$cluster)),
-       aes(x = PC1, y = PC2, color = cl)) + 
-  geom_point() + theme_classic() + xlim(-10,10) + ylim(-10,10)
-dev.off()
 #Stat test
 SDEG_ls <- list()
 logfc <- 0.1
@@ -1028,23 +748,22 @@ for(i in 1:2){
   SDEG_ls[[group_name]]  <- gene_df
 }
 
-
 ```
 
 ### Export cl res
 
 ```{r }
-group_name <- "13mo"
-tmp_df <- data.frame(expr_df[expr_df$group == group_name,c(1,8:17)],
-                     p_val = SDEG_ls[[group_name]]$p_val,
-                     cl = SDEG_ls[[group_name]]$cluster)
-seq_vec <- c(2,6,4,3,5,1)
-tmp_df$cluster <- apply(tmp_df,1,
-                        FUN = function(x){ paste0("Cluster_",which(seq_vec == as.numeric(x[["cl"]])))})
-tmp_df <- arrange(tmp_df,cluster)
-
-write_csv(tmp_df,paste0("May26_gene_cl_",group_name,".csv"))
-
+for(group_name in c("8mo","13mo")){
+  tmp_df <- data.frame(expr_df[expr_df$group == group_name,c(1,8:17)],
+                       p_val = SDEG_ls[[group_name]]$p_val,
+                       cl = SDEG_ls[[group_name]]$cluster)
+  seq_vec <- c(2,6,4,3,5,1)
+  tmp_df$cluster <- apply(tmp_df,1,
+                          FUN = function(x){ paste0("Cluster_",which(seq_vec == as.numeric(x[["cl"]])))})
+  tmp_df <- arrange(tmp_df,cluster)
+  
+  write_csv(tmp_df,paste0("Jun22_gene_cl_",group_name,".csv"))
+}
 ```
 
 ### Draw Heatmap
@@ -1087,6 +806,11 @@ v_heatmap %>% draw()
 v_heatmap2 %>% draw()
 dev.off()
 
+```
+
+### Venn Diagram
+
+```{r }
 # ref
 PIG <- c('APOE','AXL','CD63','CD63-PS','CD9','CTSB','CTSD','CTSL','CTSZ','H2-K1','HEXA','LGALS3BP','LYZ2',
          'NPC2','TREM2','TYROBP','H2-D1','B2M','C4B','GFAP','SERPINA3N','ARPC1B','C1QA','C1QB','C1QC','C4A',
@@ -1174,124 +898,117 @@ ggplot(data = tmp_df %>% subset(log2p > 0), aes(x = term_name, y = log2p, fill =
 ```{r }
 # For Combined Spatial Analysis
 for(group_name in c("13mo","8mo")){
+  p_val <- 0.05
+  sample_list <- list("8mo" = c("ADmouse_9723","ADmouse_9723_2"), "13mo" = c("ADmouse_9494","ADmouse_11346"))
+  tmp_cell_type_list <- list("Micro" = c("Micro"), "Astro" = c("Astro"), "Oligo" = c("Oligo"),
+                             "Neuron" = c("CTX-Ex","CA1","CA2","CA3","DG","Inh"), "CTX-Ex" = c("CTX-Ex"), "DG" = c("DG"))
+  gene_list <- row.names(starmap_raw)
+  expr_df <- data.frame(gene = rep(gene_list, times = length(tmp_cell_type_list)),
+                        cell_type = "-", sample = "-",
+                        R10 = 0,R20 = 0,R30 = 0,R40 = 0,"R40+" = 0,
+                        RA10 = 0,RA20 = 0,RA30 = 0,RA40 = 0,"RA40+" = 0,
+                        RB10 = 0,RB20 = 0,RB30 = 0,RB40 = 0,"RB40+" = 0)
+  expr_df[["cell_type"]] <- rep(tmp_cell_type_list, each = length(gene_list))
+  #1 8mo 2 13mo
+  expr_df[["sample"]] <- rep(sample_list[which(names(sample_list) == group_name)],
+                             each = length(gene_list)*length(tmp_cell_type_list))
   
-}
-
-p_val <- 0.05
-sample_list <- list("8mo" = c("ADmouse_9723","ADmouse_9723_2"), "13mo" = c("ADmouse_9494","ADmouse_11346"))
-tmp_cell_type_list <- list("Micro" = c("Micro"), "Astro" = c("Astro"), "Oligo" = c("Oligo"),
-                           "Neuron" = c("CTX-Ex","CA1","CA2","CA3","DG","Inh"), "CTX-Ex" = c("CTX-Ex"), "DG" = c("DG"))
-gene_list <- row.names(starmap_raw)
-expr_df <- data.frame(gene = rep(gene_list, times = length(tmp_cell_type_list)),
-                      cell_type = "-", sample = "-",
-                      R10 = 0,R20 = 0,R30 = 0,R40 = 0,"R40+" = 0,
-                      RA10 = 0,RA20 = 0,RA30 = 0,RA40 = 0,"RA40+" = 0,
-                      RB10 = 0,RB20 = 0,RB30 = 0,RB40 = 0,"RB40+" = 0)
-expr_df[["cell_type"]] <- rep(tmp_cell_type_list, each = length(gene_list))
-#1 8mo 2 13mo
-expr_df[["sample"]] <- rep(sample_list[which(names(sample_list) == group_name)],
-                           each = length(gene_list)*length(tmp_cell_type_list))
-
-colnames(expr_df)[8] <- "R40+"
-colnames(expr_df)[13] <- "RA40+"
-colnames(expr_df)[18] <- "RB40+"
-
-sample_vec <- sample_list %>% unlist()
-cell_type_vec <- unlist(tmp_cell_type_list)
-
-for(i in 1:length(sample_vec)){
-  if(i == 1){
-    tmp_mat <- starmap_raw@assays$raw@data[,starmap_raw@meta.data$sample == sample_vec[1]]
-    cell_meta <- data.frame(sample = sample_vec[1],
-                            starmap_raw@misc[[paste0(sample_vec[1],"_plaque_all")]][[paste0(sample_vec[1],"_cell_meta")]]) 
-  }else{
-    tmp_mat <- cbind(tmp_mat,
-                     starmap_raw@assays$raw@data[,starmap_raw@meta.data$sample == sample_vec[i]])
-    cell_meta <- rbind(cell_meta,
-                       data.frame(sample = sample_vec[i],
-                       starmap_raw@misc[[paste0(sample_vec[i],"_plaque_all")]][[paste0(sample_vec[i],"_cell_meta")]]) )
+  colnames(expr_df)[8] <- "R40+"
+  colnames(expr_df)[13] <- "RA40+"
+  colnames(expr_df)[18] <- "RB40+"
+  
+  sample_vec <- sample_list %>% unlist()
+  cell_type_vec <- unlist(tmp_cell_type_list)
+  
+  for(i in 1:length(sample_vec)){
+    if(i == 1){
+      tmp_mat <- starmap_raw@assays$raw@data[,starmap_raw@meta.data$sample == sample_vec[1]]
+      cell_meta <- data.frame(sample = sample_vec[1],
+                              starmap_raw@misc[[paste0(sample_vec[1],"_plaque_all")]][[paste0(sample_vec[1],"_cell_meta")]]) 
+    }else{
+      tmp_mat <- cbind(tmp_mat,
+                       starmap_raw@assays$raw@data[,starmap_raw@meta.data$sample == sample_vec[i]])
+      cell_meta <- rbind(cell_meta,
+                         data.frame(sample = sample_vec[i],
+                         starmap_raw@misc[[paste0(sample_vec[i],"_plaque_all")]][[paste0(sample_vec[i],"_cell_meta")]]) )
+    }
   }
+  for(i in 1:5){
+    expr_df[[i+3]] <- apply(expr_df,1,
+                          FUN = function(x){
+                            if(i == 5){
+                              mean(tmp_mat[x[["gene"]], cell_meta$interval %in% c("50um","other") & 
+                                             cell_meta$top_level %in% unlist(x[["cell_type"]]) ])
+                            }else{
+                              mean(tmp_mat[x[["gene"]], cell_meta$interval == paste0(i,"0um") & 
+                                             cell_meta$top_level %in% unlist(x[["cell_type"]])])
+                            }
+                          })
+    expr_df[[i+8]] <- apply(expr_df,1,
+                          FUN = function(x){
+                            if(i == 5){
+                              mean(tmp_mat[x[["gene"]], cell_meta$interval %in% c("50um","other") & 
+                                             cell_meta$sample %in% unlist(x[["sample"]])[1] &
+                                             cell_meta$top_level %in% unlist(x[["cell_type"]])])
+                            }else{
+                              mean(tmp_mat[x[["gene"]], cell_meta$interval == paste0(i,"0um") & 
+                                             cell_meta$sample == unlist(x[["sample"]])[1] &
+                                             cell_meta$top_level %in% unlist(x[["cell_type"]]) ])
+                            }
+                          })
+    expr_df[[i+13]] <- apply(expr_df,1,
+                          FUN = function(x){
+                            if(i == 5){
+                              mean(tmp_mat[x[["gene"]], cell_meta$interval %in% c("50um","other") & 
+                                             cell_meta$sample %in% unlist(x[["sample"]])[2] &
+                                             cell_meta$top_level %in% unlist(x[["cell_type"]])])
+                            }else{
+                              mean(tmp_mat[x[["gene"]], cell_meta$interval == paste0(i,"0um") & 
+                                             cell_meta$sample == unlist(x[["sample"]])[2] &
+                                             cell_meta$top_level %in% unlist(x[["cell_type"]])])
+                            }
+                          })
+  }
+  
+  expr_df[["max_int"]] <- apply(expr_df,1,
+                                FUN = function(x){
+                                  R10 <- as.numeric(x[["R10"]])
+                                  R20 <- as.numeric(x[["R20"]])
+                                  R30 <- as.numeric(x[["R30"]])
+                                  R40 <- as.numeric(x[["R40"]])
+                                  R50 <- as.numeric(x[["R40+"]])
+                                  if( R10 > max(R20,R30,R40,R50)) 1
+                                  else if( R20 > max(R10,R30,R40,R50)) 2
+                                  else if( R30 > max(R20,R10,R40,R50)) 3
+                                  else 4
+                                })
+  
+  expr_df[["p_val"]] <- apply(expr_df,1,
+                             FUN = function(x){
+                               i = x[["max_int"]]
+                               if(i == 4) return(1)
+                               tmp_vec1 <- tmp_mat[x[["gene"]],
+                                                     cell_meta$top_level %in% unlist(x[["cell_type"]]) &
+                                                     cell_meta$interval == paste(i,"0um",sep = "")]
+                               tmp_vec2 <- tmp_mat[x[["gene"]],
+                                                     cell_meta$top_level %in% unlist(x[["cell_type"]]) & 
+                                                     cell_meta$interval != paste(i,"0um",sep = "")]
+                               a <- wilcox.test(tmp_vec1,tmp_vec2, alternative = "greater")$p.value
+                               return(a)
+                             })
+  
+  expr_df[["p_val_adj"]] <- 1
+  expr_df[["group"]] <- rep(names(tmp_cell_type_list), each = length(gene_list))
+  
+  for(i in names(tmp_cell_type_list)){
+    expr_df[["p_val_adj"]][expr_df$group == i] <- p.adjust(expr_df[["p_val"]][expr_df$group == i])
+  }
+  
+  SDEG_ls[[paste0(group_name,"_cell_type")]] <- expr_df 
 }
-#c("R10","R20","R30","R40","R40+")
-for(i in 1:5){
-  expr_df[[i+3]] <- apply(expr_df,1,
-                        FUN = function(x){
-                          if(i == 5){
-                            mean(tmp_mat[x[["gene"]], cell_meta$interval %in% c("50um","other") & 
-                                           cell_meta$top_level %in% unlist(x[["cell_type"]]) ])
-                          }else{
-                            mean(tmp_mat[x[["gene"]], cell_meta$interval == paste0(i,"0um") & 
-                                           cell_meta$top_level %in% unlist(x[["cell_type"]])])
-                          }
-                        })
-  expr_df[[i+8]] <- apply(expr_df,1,
-                        FUN = function(x){
-                          if(i == 5){
-                            mean(tmp_mat[x[["gene"]], cell_meta$interval %in% c("50um","other") & 
-                                           cell_meta$sample %in% unlist(x[["sample"]])[1] &
-                                           cell_meta$top_level %in% unlist(x[["cell_type"]])])
-                          }else{
-                            mean(tmp_mat[x[["gene"]], cell_meta$interval == paste0(i,"0um") & 
-                                           cell_meta$sample == unlist(x[["sample"]])[1] &
-                                           cell_meta$top_level %in% unlist(x[["cell_type"]]) ])
-                          }
-                        })
-  expr_df[[i+13]] <- apply(expr_df,1,
-                        FUN = function(x){
-                          if(i == 5){
-                            mean(tmp_mat[x[["gene"]], cell_meta$interval %in% c("50um","other") & 
-                                           cell_meta$sample %in% unlist(x[["sample"]])[2] &
-                                           cell_meta$top_level %in% unlist(x[["cell_type"]])])
-                          }else{
-                            mean(tmp_mat[x[["gene"]], cell_meta$interval == paste0(i,"0um") & 
-                                           cell_meta$sample == unlist(x[["sample"]])[2] &
-                                           cell_meta$top_level %in% unlist(x[["cell_type"]])])
-                          }
-                        })
-}
-
-
-expr_df[["max_int"]] <- apply(expr_df,1,
-                              FUN = function(x){
-                                R10 <- as.numeric(x[["R10"]])
-                                R20 <- as.numeric(x[["R20"]])
-                                R30 <- as.numeric(x[["R30"]])
-                                R40 <- as.numeric(x[["R40"]])
-                                R50 <- as.numeric(x[["R40+"]])
-                                if( R10 > max(R20,R30,R40,R50)) 1
-                                else if( R20 > max(R10,R30,R40,R50)) 2
-                                else if( R30 > max(R20,R10,R40,R50)) 3
-                                else 4
-                              })
-
-expr_df[["p_val"]] <- apply(expr_df,1,
-                           FUN = function(x){
-                             i = x[["max_int"]]
-                             if(i == 4) return(1)
-                             tmp_vec1 <- tmp_mat[x[["gene"]],
-                                                   cell_meta$top_level %in% unlist(x[["cell_type"]]) &
-                                                   cell_meta$interval == paste(i,"0um",sep = "")]
-                             tmp_vec2 <- tmp_mat[x[["gene"]],
-                                                   cell_meta$top_level %in% unlist(x[["cell_type"]]) & 
-                                                   cell_meta$interval != paste(i,"0um",sep = "")]
-                             a <- wilcox.test(tmp_vec1,tmp_vec2, alternative = "greater")$p.value
-                             return(a)
-                           })
-
-
-expr_df[["p_val_adj"]] <- 1
-expr_df[["group"]] <- rep(names(tmp_cell_type_list), each = length(gene_list))
-
-for(i in names(tmp_cell_type_list)){
-  expr_df[["p_val_adj"]][expr_df$group == i] <- p.adjust(expr_df[["p_val"]][expr_df$group == i])
-  #expr_df[["p_val_adj_B"]][expr_df$group == i] <- p.adjust(expr_df[["p_val_B"]][expr_df$group == i])
-}
-
-
-SDEG_ls[[paste0(group_name,"_cell_type")]] <- expr_df
 
 #Print Astro/Micro/Oligo SDEG
-expr_df <- SDEG_ls[["13mo"]] 
+expr_df <- SDEG_ls[["13mo_cell_type"]] 
 for(i in c("Astro","Micro","Oligo")){
   if(i == "Astro" | i == "Oligo"){
     tmp_vec <- expr_df[["p_val"]] < p_val & expr_df$group == i & expr_df[["max_int"]] != 1 
@@ -1306,11 +1023,11 @@ for(i in c("Astro","Micro","Oligo")){
 
 #Export xlsx
 for(i in names(tmp_cell_type_list)){
-  tmp_vec <- expr_df[["p_val_A"]] < p_val & expr_df[["p_val_B"]] < p_val & 
-    expr_df[["max_int_A"]] == expr_df[["max_int_B"]]  & expr_df$group == i
-  tmp_df <- expr_df[tmp_vec, c(1,23,9:22)]
-  write.xlsx(tmp_df, file="Apr01_SDEG.xlsx", sheetName=paste0(i,"_13mo"), append = T, row.names=FALSE)
+  tmp_vec <- expr_df$group == i
+  tmp_df <- expr_df[tmp_vec, c(1,22,20,21,4:18)]
+  write.xlsx(tmp_df, file="Jun22_SDEG.xlsx", sheetName=paste0(i,"_13mo"), append = T, row.names=FALSE)
 }
+#Export Heatmap
 plot_list <- list()
 
 k = "13mo"
@@ -1330,8 +1047,6 @@ for(i in c("Astro","Oligo","Micro")){
                                                     rowSums(starmap_raw@assays$RNA@counts[,tmp_vec2] > 0)/sum(tmp_vec2) < 0.85]))
     }
   }
-  
-  
   
   if(i == "Astro" | i == "Oligo"){
     tmp_vec <- expr_df[["p_val"]] < p_val & expr_df$gene %in% gene_vec &
@@ -1405,8 +1120,6 @@ myGO <- data.frame(GOID = myGO_gmt$geneset.names,
 #0: "ADmouse_9723_2","ADmouse_9707", "ADmouse_11346", "ADmouse_11351"
 #1: "ADmouse_9723","ADmouse_9494","ADmouse_9735","ADmouse_9498"
 #2: all samples
-
-
 ```
 
 ### Run DE
@@ -1784,295 +1497,9 @@ dev.off()
 
 ## Stat. Test
 
-### Func.
-
-```{r}
-#####Test Para
-res_ls <- starmap_raw@misc$ADmouse_9494_plaque_Cortex
-sample_name <- "ADmouse_9494"
-region_size <- sum(starmap_raw@misc$ADmouse_9494_morph$region == 3)
-region <- "Hippocampus"
-top_level_list <- c("CTX-Ex", "Endo", "Inh", "Micro", "Astro", "OPC","Oligo", "SMC") 
-
-res_ls <- starmap_64@misc$AD_mouse9721_plaque_all
-sample_name <- "AD_mouse9721"
-region_size <-  dim(starmap_64@misc[[paste0(sample_name,"_morph")]]$plaque)[1] *
-  dim(starmap_64@misc[[paste0(sample_name,"_morph")]]$plaque)[2]
-region <- "all"
-top_level_list <- c("CTX-Ex", "CA1","CA2","CA3", "DG","Endo", "Inh", "Micro", "Astro", "OPC","Oligo", "SMC")
-#####Func1
-ad_distr_stat <- function(res_ls, sample_name, region_size, cell_type_list, top_level_list, region = "all"){
-  dilate_ls <- res_ls[[paste0(sample_name,"_plaque_dilate_info")]]
-  cell_meta <- res_ls[[paste0(sample_name,"_cell_meta")]]
-  plaque_meta <- res_ls[[paste0(sample_name,"_plaque_meta")]]
-  dilate_area <- res_ls[[paste0(sample_name,"_plaque_dilate_area")]]
-  cell_meta <- subset(cell_meta, top_level %in% top_level_list)
-  return_ls <- list()
-  return_ls[["avg_stat"]] <- list()
-  #Top level
-  tmp_vec <- setNames(sapply(top_level_list,function(x){1000000* sum(cell_meta$top_level == x)/(region_size/3.3^2)}), 
-                      top_level_list)#avg density
-
-  tmp_df <- data.frame(plaque_id = rep(plaque_meta$plaque_id, each = length(top_level_list)),
-                       top_level = rep(top_level_list, nrow(plaque_meta)))
-  for(i in 1:5){
-    tmp_df[[paste0("R",i*10)]] <- apply(tmp_df,1,
-                                        FUN = function(x){
-                                          if(!as.numeric(x[["plaque_id"]]) %in%
-                                             dilate_ls[[paste0(i,"0um_dilate_info")]]$plaque_id){ NA
-                                          }else{
-                                            1000000 * sum(cell_meta$interval == paste0(i,"0um") & 
-                                                cell_meta$nearest_plaque == as.numeric(x[["plaque_id"]]) &
-                                                cell_meta$top_level == as.character(x[["top_level"]])) /                                            (dilate_ls[[paste0(i,"0um_dilate_info")]]$s.area[dilate_ls[[paste0(i,"0um_dilate_info")]]$plaque_id ==  as.numeric(x[["plaque_id"]])]/3.3^2)
-                                          }
-                                        })
-
-  }
-  return_ls[["top_level"]] <- tmp_df
-  return_ls[["avg_stat"]][["top_level"]] <- tmp_vec
-  #Sub type
-  for(i in names(cell_type_list)){
-      tmp_df <- data.frame(plaque_id = rep(plaque_meta$plaque_id, each = length(cell_type_list[[i]])),
-                           subtype = rep(cell_type_list[[i]], nrow(plaque_meta)))
-      for(j in 1:5){
-        tmp_df[[paste0("R",j*10)]] <- apply(tmp_df,1,
-                                            FUN = function(x){
-                                               if(!as.numeric(x[["plaque_id"]]) %in%
-                                             dilate_ls[[paste0(j,"0um_dilate_info")]]$plaque_id) NA
-                                          else{
-                                            1000000 * sum(cell_meta$interval == paste0(j,"0um") & 
-                                                  cell_meta$nearest_plaque == as.numeric(x[["plaque_id"]]) &
-                                                  cell_meta$cell_type == as.character(x[["subtype"]])) /                                          (dilate_ls[[paste0(j,"0um_dilate_info")]]$s.area[dilate_ls[[paste0(j,"0um_dilate_info")]]$plaque_id ==  as.numeric(x[["plaque_id"]])]/3.3^2)
-                                          }
-                                            }) %>% unlist
-      }
-      
-      tmp_vec <- setNames(sapply(cell_type_list[[i]],function(x){1000000* sum(cell_meta$cell_type == x)/(region_size/3.3^2)}), 
-                      cell_type_list[[i]])#avg density
-      return_ls[[i]] <- tmp_df
-      return_ls[["avg_stat"]][[i]] <- tmp_vec
-  }
-  return_ls[["cell_meta"]] <- cell_meta
-  return_ls[["dilate_vec"]] <- dilate_area
-  return_ls
-}
-#####Test Para
-sample_list <- c("ADmouse_9494","ADmouse_11346") 
-res_ls <- distr_stat_ls
-region = "Hippocampus"
-
-sample_list <- c("AD_mouse9721") 
-res_ls <- distr_stat_ls
-region = "all"
-
-#####Func2
-ad_distr_combined_analysis <- function(sample_list, res_ls, region, cell_type_list){
-  return_ls <- list()
-  return_ls[["plot_ls"]] <- list()
-  return_ls[["stat_ls"]] <- list()
-  stacked_vln <- function(df, palette_list, title, level, mean_vec){
-    colnames(df)[colnames(df) == level] <- "cell_type"
-    ggplot(df,aes(variable, value, fill = cell_type)) +
-          geom_violin(scale = "width", adjust = 1, trim = TRUE) +
-          scale_y_continuous(expand = c(0, 0), position="right", labels = function(x)
-                             c(rep(x = "", times = length(x)-2), x[length(x) - 1], "")) +
-          facet_grid(rows = vars(cell_type) , scales = "free", switch = "y") +
-          geom_hline(data = data.frame(cell_type = factor(names(mean_vec)), value = tmp_vec), 
-                     aes(yintercept = value),color = "green") + 
-          theme_cowplot(font_size = 12) +
-          theme(legend.position = "none", panel.spacing = unit(0, "lines"),
-                panel.background = element_rect(fill = NA, color = "black"),
-                strip.background = element_blank(),
-                strip.text = element_text(face = "bold"),
-                strip.text.y.left = element_text(angle = 0),
-                axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
-          scale_fill_manual(values = palette_list,
-                      breaks = names(palette_list)) + 
-          ggtitle(paste(paste(sample_list,collapse = " "), title)) + xlab("Interval") + ylab("Density")
-  }
-  
-  cell_meta <- res_ls[[paste(sample_list[1],region,sep = "_")]][["cell_meta"]]
-  dilate_vec <- res_ls[[paste(sample_list[1],region,sep = "_")]][["dilate_vec"]]
-  tmp_df <- as.data.frame(res_ls[[paste(sample_list[1],region,sep = "_")]][["top_level"]])
-  tmp_vec <- res_ls[[paste(sample_list[1],region,sep = "_")]][["avg_stat"]][["top_level"]]
-  if(length(sample_list) > 1){
-      for(i in 2:length(sample_list)){
-        cell_meta <- rbind(cell_meta,res_ls[[paste(sample_list[i],region,sep = "_")]][["cell_meta"]])
-      }
-      
-      for(i in 2:length(sample_list)){
-        dilate_vec <- dilate_vec + res_ls[[paste(sample_list[i],region,sep = "_")]][["dilate_vec"]]
-      }
-      #Top level
-      
-      for(i in 2:length(sample_list)){
-        tmp_df <- rbind(tmp_df,as.data.frame(res_ls[[paste(sample_list[i],region,sep = "_")]][["top_level"]]))
-      }
-      
-      for(i in 2:length(sample_list)){
-        tmp_vec <- tmp_vec+res_ls[[paste(sample_list[i],region,sep = "_")]][["avg_stat"]][["top_level"]]
-      }
-  }
-
-  tmp_vec <- tmp_vec/length(sample_list)
-  tmp_list <- list()
-  tmp_list[["perc_df"]] <- data.frame(top_level = levels(as.factor(tmp_df$top_level)))
-  tmp_list[["dens_df"]] <- data.frame(top_level = levels(as.factor(tmp_df$top_level)))
-  tmp_list[["stat_c_df"]] <- data.frame(top_level = levels(as.factor(tmp_df$top_level)))#Chi-sq test
-  tmp_list[["stat_t_df"]] <- data.frame(top_level = levels(as.factor(tmp_df$top_level)))#one sample t-test
-  for(i in 1:5){
-    tmp_list[["perc_df"]][[paste0("R",i*10)]] <- apply(tmp_list[["perc_df"]],1,
-                                                        FUN = function(x){
-                                                          sum(cell_meta$top_level == x[["top_level"]] &
-                                                                cell_meta$interval == paste0(i,"0um"))/
-                                                            sum(cell_meta$interval == paste0(i,"0um"))})
-    tmp_list[["dens_df"]][[paste0("R",i*10)]]  <- apply(tmp_list[["dens_df"]],1,
-                                                        FUN = function(x){
-                                                          1000000 * sum(cell_meta$top_level == x[["top_level"]] &
-                                                                cell_meta$interval == paste0(i,"0um"))/
-                                                            (dilate_vec[[paste0(i,"0um")]]/3.3^2) })
-    
-    tmp_list[["stat_t_df"]][[paste0("R",i*10)]] <- apply(tmp_list[["stat_t_df"]],1,
-                                         FUN = function(x){
-                                           tmp_vec2 <- as.numeric(tmp_df[[paste0("R",i*10)]]) %>% 
-                                             .[tmp_df$top_level == x[["top_level"]]] %>% na.omit()
-                                           
-                                           tmp_obj <- t.test(x = tmp_vec2,
-                                                             mu = tmp_vec[[x[["top_level"]]]], 
-                                                             alternative = ifelse(mean(tmp_vec2) > tmp_vec[[x[["top_level"]]]],
-                                                                                  "greater", "less"))
-                                           tmp_obj$p.value
-                                         })
-    
-    tmp_list[["stat_c_df"]][[paste0("R",i*10)]] <- apply(tmp_list[["stat_c_df"]],1,
-                                         FUN = function(x){
-                                           a = sum(cell_meta$top_level == x[["top_level"]] & cell_meta$interval == paste0(i,"0um"))
-                                           b = sum(cell_meta$top_level != x[["top_level"]] & cell_meta$interval == paste0(i,"0um"))
-                                           c = sum(cell_meta$top_level == x[["top_level"]] & cell_meta$interval != paste0(i,"0um"))
-                                           d = sum(cell_meta$top_level != x[["top_level"]] & cell_meta$interval != paste0(i,"0um"))
-                                           
-                                           tmp_obj <- suppressWarnings(chisq.test(x = matrix(c(a,c,b,d), nrow = 2)))
-                                           tmp_obj$p.value
-                                         })
-  }
-  #Add overall 
-  tmp_list[["dens_df"]] <- left_join(tmp_list[["dens_df"]],
-                                     data.frame(top_level = names(tmp_vec),overall = tmp_vec), by = "top_level")
-  tmp_list[["perc_df"]][["overall"]] <- apply(tmp_list[["perc_df"]],1,
-                                                        FUN = function(x){
-                                                          sum(cell_meta$top_level == x[["top_level"]])/nrow(cell_meta)})
-  return_ls[["stat_ls"]][["combined"]] <- tmp_list
-  #Stacked Barplot
-  require(reshape2)
-  require(cowplot)
-  require(magrittr)
-  tmp_df %<>% melt(id.vars = c("plaque_id","top_level")) %>% subset(!is.na(value))
-  for(i in levels(factor(tmp_df$top_level))){
-    if(sum(tmp_df$value == 0 & tmp_df$top_level == i) / sum(tmp_df$value == 0 & tmp_df$top_level == i) < 0.99){
-      tmp_df <- tmp_df[tmp_df$top_level != i|tmp_df$value < quantile(tmp_df$value[tmp_df$top_level == i], probs = 0.99),]
-    }
-  }
-  return_ls[["plot_ls"]][["combined"]] <- stacked_vln(tmp_df, top_level_palette_list, "Top Level", "top_level", tmp_vec)
-  
-  for(j in names(cell_type_list)){
-    
-    tmp_df <- as.data.frame(res_ls[[paste(sample_list[1],region,sep = "_")]][[j]])
-    tmp_vec <- res_ls[[paste(sample_list[1],region,sep = "_")]][["avg_stat"]][[j]]
-    if(length(sample_list) > 1){
-          for(i in 2:length(sample_list)){
-            tmp_df <- rbind(tmp_df,as.data.frame(res_ls[[paste(sample_list[i],region,sep = "_")]][[j]]))
-          }
-          
-          for(i in 2:length(sample_list)){
-            tmp_vec <- tmp_vec+res_ls[[paste(sample_list[i],region,sep = "_")]][["avg_stat"]][[j]]
-          }
-    }
-
-    tmp_vec <- tmp_vec/length(sample_list)
-    tmp_list <- list()
-    tmp_list[["perc_df"]]  <- data.frame(subtype = levels(as.factor(tmp_df$subtype)))
-    tmp_list[["dens_df"]]  <- data.frame(subtype = levels(as.factor(tmp_df$subtype)))
-    tmp_list[["stat_c_df"]] <- data.frame(subtype = levels(as.factor(tmp_df$subtype)))#Chi-sq test
-    tmp_list[["stat_t_df"]] <- data.frame(subtype = levels(as.factor(tmp_df$subtype)))#one sample t-test
-    for(i in 1:5){
-      tmp_list[["perc_df"]][[paste0("R",i*10)]] <- apply(tmp_list[["perc_df"]],1,
-                                                        FUN = function(x){
-                                                          sum(cell_meta$cell_type == x[["subtype"]] &
-                                                                cell_meta$interval == paste0(i,"0um"))/
-                                                            sum(cell_meta$interval == paste0(i,"0um") &
-                                                                  cell_meta$cell_type %in% cell_type_list[[j]])})
-      tmp_list[["dens_df"]][[paste0("R",i*10)]]  <- apply(tmp_list[["dens_df"]],1,
-                                                        FUN = function(x){
-                                                          1000000 * sum(cell_meta$cell_type == x[["subtype"]] &
-                                                                cell_meta$interval == paste0(i,"0um"))/
-                                                            (dilate_vec[[paste0(i,"0um")]]/3.3^2) })
-    
-      tmp_list[["stat_t_df"]][[paste0("R",i*10)]] <- apply(tmp_list[["stat_t_df"]],1,
-                                         FUN = function(x){
-                                           tmp_vec2 <- as.numeric(tmp_df[[paste0("R",i*10)]]) %>% 
-                                             .[tmp_df$subtype == x[["subtype"]]] %>% na.omit()
-                                           
-                                           tmp_obj <- t.test(x = tmp_vec2,
-                                                             mu = tmp_vec[[x[["subtype"]]]], 
-                                                             alternative = ifelse(mean(tmp_vec2) > tmp_vec[[x[["subtype"]]]],
-                                                                                  "greater", "less"))
-                                           tmp_obj$p.value
-                                         })
-    
-      tmp_list[["stat_c_df"]][[paste0("R",i*10)]] <- apply(tmp_list[["stat_c_df"]],1,
-                                         FUN = function(x){
-                                           a = sum(cell_meta$cell_type == x[["subtype"]] & cell_meta$interval == paste0(i,"0um"))
-                                           b = sum(cell_meta$cell_type != x[["subtype"]] & cell_meta$interval == paste0(i,"0um"))
-                                           c = sum(cell_meta$cell_type == x[["subtype"]] & cell_meta$interval != paste0(i,"0um"))
-                                           d = sum(cell_meta$cell_type != x[["subtype"]] & cell_meta$interval != paste0(i,"0um"))
-                                           
-                                           tmp_obj <- suppressWarnings(chisq.test(x = matrix(c(a,c,b,d), nrow = 2)))
-                                           tmp_obj$p.value
-                                         })
-    }
-      #Add overall 
-    tmp_list[["dens_df"]] <- left_join(tmp_list[["dens_df"]],
-                                     data.frame(subtype = names(tmp_vec),overall = tmp_vec), by = "subtype")
-    tmp_list[["dens_df"]][["overall"]] <- tmp_vec
-    tmp_list[["perc_df"]][["overall"]] <- apply(tmp_list[["perc_df"]],1,
-                                                        FUN = function(x){
-                                                          sum(cell_meta$cell_type == x[["subtype"]])/
-                                                            sum(cell_meta$cell_type %in% cell_type_list[[j]])})
-    return_ls[["stat_ls"]][[j]] <- tmp_list
-    #Stacked Barplot
-    tmp_df %<>% melt(id.vars = c("plaque_id","subtype")) %>% subset(!is.na(value))
-    #Skip for CADG
-    for(i in levels(factor(tmp_df$subtype))){
-      if(sum(tmp_df$value == 0 & tmp_df$subtype == i)/sum(tmp_df$subtype == i) < 0.99){
-        tmp_df <- tmp_df[tmp_df$subtype != i|tmp_df$value < quantile(tmp_df$value[tmp_df$subtype == i], probs = 0.99),]
-        }
-    }
-    
-    return_ls[["plot_ls"]][[j]] <- stacked_vln(tmp_df, cell_type_palette_list[[j]], j, "subtype", tmp_vec)
-  }
-  return_ls
-}
-```
-
 ### Export
 
 ```{r }
-starmap_raw <- ad_calc_plaque_dist2(starmap_raw,starmap_raw@misc[["ADmouse_11346_morph"]], 400, "ADmouse_11346", top_level_palette_list, "all")
-starmap_raw <- ad_calc_plaque_dist2(starmap_raw,starmap_raw@misc[["ADmouse_9723_2_morph"]], 400, "ADmouse_9723_2", top_level_palette_list, "all")
-starmap_raw <- ad_calc_plaque_dist2(starmap_raw,starmap_raw@misc[["ADmouse_9723_morph"]], 400, "ADmouse_9723", top_level_palette_list, "all")
-starmap_raw <- ad_calc_plaque_dist2(starmap_raw,starmap_raw@misc[["ADmouse_9494_morph"]], 400, "ADmouse_9494", top_level_palette_list, "all")
-
-starmap_raw <- ad_calc_plaque_dist2(starmap_raw,starmap_raw@misc[["ADmouse_9494_morph"]], 400, "ADmouse_9494", top_level_palette_list, "Cortex")
-starmap_raw <- ad_calc_plaque_dist2(starmap_raw,starmap_raw@misc[["ADmouse_9494_morph"]], 400, "ADmouse_9494", top_level_palette_list, "Hippocampus")
-starmap_raw <- ad_calc_plaque_dist2(starmap_raw,starmap_raw@misc[["ADmouse_9723_morph"]], 400, "ADmouse_9723", top_level_palette_list, "Cortex")
-starmap_raw <- ad_calc_plaque_dist2(starmap_raw,starmap_raw@misc[["ADmouse_9723_morph"]], 400, "ADmouse_9723", top_level_palette_list, "Hippocampus")
-
-starmap_raw <- ad_calc_plaque_dist2(starmap_raw,starmap_raw@misc[["ADmouse_11346_morph"]], 400, "ADmouse_11346", top_level_palette_list, "Cortex")
-starmap_raw <- ad_calc_plaque_dist2(starmap_raw,starmap_raw@misc[["ADmouse_11346_morph"]], 400, "ADmouse_11346", top_level_palette_list, "Hippocampus")
-starmap_raw <- ad_calc_plaque_dist2(starmap_raw,starmap_raw@misc[["ADmouse_9723_2_morph"]], 400, "ADmouse_9723_2", top_level_palette_list, "Cortex")
-starmap_raw <- ad_calc_plaque_dist2(starmap_raw,starmap_raw@misc[["ADmouse_9723_2_morph"]], 400, "ADmouse_9723_2", top_level_palette_list, "Hippocampus")
-
-
 #Draw Violin Plot
 distr_stat_ls <- list()
 for(i in c("ADmouse_9723","ADmouse_9723_2","ADmouse_9494","ADmouse_11346")){
@@ -2305,7 +1732,7 @@ tmp_df$density <- apply(tmp_df,1,
                             else tmp_img <- starmap_64@misc[[paste0(i,"_morph")]]$plaque
                             region_size <- region_size + dim(tmp_img)[1] * dim(tmp_img)[2]
                           }
-                          cell_count/region_size*3.3^2*1000000
+                          cell_count/region_size*res_factor^2*1000000
                         })
 
 plot_list[["Density_comparison"]] <- ggplot(tmp_df,aes(x = label, y = density, fill = cell_type)) + 
@@ -2506,7 +1933,7 @@ for(i in c("Oligo1","Oligo2","Oligo3","OPC","Astro1","Astro2","Astro3","Micro1",
                          }else if(x[["group"]] == "val"){
                            count_num <- sum(starmap_64@meta.data$region == "Alveus" & starmap_64@meta.data$cell_type == i & starmap_64@meta.data$sample %in% tmp_vec)
                          }
-                         count_num/as.numeric(x[["alveus_area"]])*3.3^2*1000000
+                         count_num/as.numeric(x[["alveus_area"]])*res_factor^2*1000000
                        })
 }
 
@@ -2519,5 +1946,34 @@ ggplot(tmp_df[,c(5:8,15)] %>% melt(id.vars = "label"),aes(x = label, y = value, 
   theme_classic() + 
   theme(axis.text.x = element_text(angle = 90)) +
   scale_fill_manual(values = top_level_palette_list)
+
+#Fig5 Oligo Alveus
+
+cell_meta <- subset(starmap@meta.data, cell_type %in% c("Oligo1","Oligo2","Oligo3","OPC") & region == "Alveus")
+cell_meta$group <- paste(cell_meta$group,cell_meta$time,sep = "_")
+tmp_df <- cell_meta %>% group_by(group,cell_type) %>% summarise(count = n())
+
+tmp_vec <- c("control_13months" = sum(starmap@misc$ADmouse_9498_morph$region == 3) +
+               sum(starmap@misc$ADmouse_11351_morph$region == 3),
+             "control_8months" = sum(starmap@misc$ADmouse_9735_morph$region == 3) +
+               sum(starmap@misc$ADmouse_9707_morph$region == 3),
+             "disease_13months" = sum(starmap@misc$ADmouse_9494_morph$region == 3) +
+               sum(starmap@misc$ADmouse_11346_morph$region == 3),
+             "disease_8months" = sum(starmap@misc$ADmouse_9723_morph$region == 3) +
+               sum(starmap@misc$ADmouse_9723_2_morph$region == 3))
+
+for(i in levels(as.factor(cell_meta$group))){
+  tmp_df$count[tmp_df$group == i] <- tmp_df$count[tmp_df$group == i]/tmp_vec[[i]]*1000000*res_factor^2
+}
+
+tmp_df$group <- factor(tmp_df$group,levels = c("control_8months", "disease_8months",
+                                               "control_13months", "disease_13months"))
+
+ggplot(data = tmp_df,aes(x= group, y=count, fill=cell_type))+
+  geom_bar(stat="identity") + 
+  labs(title = "Oligo") +
+  theme_classic() + 
+  theme(axis.text.x = element_text(angle = 45,hjust = 1)) +
+  scale_fill_manual(values = cell_type_palette_list$Oligo)
 
 ```
