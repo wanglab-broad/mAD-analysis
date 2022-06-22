@@ -16,6 +16,7 @@ ad_calc_plaque_dist2<- function(starmap_obj,
                                 sample_name,
                                 palette_list,
                                 region = "all"){
+  res_factor = 
   #Calc Plaque Center
   require(EBImage)
   message("Load Image")
