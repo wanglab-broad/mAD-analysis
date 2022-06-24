@@ -16,7 +16,6 @@ ad_calc_plaque_dist2<- function(starmap_obj,
                                 sample_name,
                                 palette_list,
                                 region = "all"){
-  res_factor = 
   #Calc Plaque Center
   require(EBImage)
   message("Load Image")
@@ -115,7 +114,7 @@ ad_calc_plaque_dist2<- function(starmap_obj,
   dilate_img_bk <- dilate_img
   for(i in 1:5){
     dilate_img_bk <- dilate_img
-    dilate_img <- dilate(plaque > 0 , kern = makeBrush(round(3.175*20*i), shape = "disc"))
+    dilate_img <- dilate(plaque > 0 , kern = makeBrush(round(63.5*i), shape = "disc"))
     if(region != "all") dilate_img <- dilate_img * region_img
     if(i != 1) dilate_img2 <- dilate_img * (1 - dilate_img_bk) else dilate_img2 <- dilate_img
     size_vec[i] <- sum(dilate_img2) 

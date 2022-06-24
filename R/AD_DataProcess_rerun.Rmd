@@ -24,8 +24,9 @@ source("func/AD_SpatialFunction2.R")
 source("func/AD_Pseudo-timeFunction.R")
 #Load Scaled Data
 ad_ini()
-scale_ratio = 0.3 #
-res_factor = 3.3 #resolution factor
+scale_ratio = 0.3 
+res_factor = 3.3 
+
 
 starmap_raw <- LoadH5Seurat("~/Desktop/At_Broad/AD/data/2022-03-31-Hu-AD-stardist-scaled.h5seurat")
 starmap_64  <- LoadH5Seurat("~/Desktop/At_Broad/AD/data/2021-04-22-starmap-mAD-64-genes-raw.h5seurat")
@@ -415,7 +416,7 @@ for(sample_name in c('ADmouse_9723','ADmouse_9494','ADmouse_9723_2','ADmouse_113
     voronoi_img <- propagate(seeds = plaque_img, x = Image(dim = dim(plaque_img)))
     for(i in 1:5){
       dilate_img_bk <- dilate_img
-      dilate_img <- dilate(plaque_img > 0 , kern = makeBrush(round(3.175*20*i), shape = "disc"))
+      dilate_img <- dilate(plaque_img > 0 , kern = makeBrush(round(63.5*i), shape = "disc"))
       dilate_img <- dilate_img * region_img
       if(i != 1) dilate_img2 <- dilate_img * (1 - dilate_img_bk) else dilate_img2 <- dilate_img
       dilate_img2 <- (dilate_img2 & tau_img) * voronoi_img
@@ -1031,7 +1032,7 @@ for(i in names(tmp_cell_type_list)){
 plot_list <- list()
 
 k = "13mo"
-expr_df <- SDEG_ls[[k]]
+expr_df <- SDEG_ls[[paste0(k,"_cell_type")]]
 p_val = 0.01
 for(i in c("Astro","Oligo","Micro")){
   gene_vec <- c()
@@ -1050,15 +1051,14 @@ for(i in c("Astro","Oligo","Micro")){
   
   if(i == "Astro" | i == "Oligo"){
     tmp_vec <- expr_df[["p_val"]] < p_val & expr_df$gene %in% gene_vec &
-    expr_df$group == i & expr_df[["max_int"]] != 1 &  expr_df[["max_int"]] != 1 &
-      abs(expr_df[["max_int"]] - expr_df[["max_int"]]) < 2
+    expr_df$group == i & expr_df[["max_int"]] != 1 &  expr_df[["max_int"]] != 1 
   }else if(k == "8mo" & i == "Micro"){
     tmp_vec <- expr_df[["p_val"]] < p_val & expr_df$gene %in% gene_vec &
       expr_df$group == i & expr_df[["max_int"]] != 3 &  expr_df[["max_int"]] != 3 &
-      expr_df$group == i & abs(expr_df[["max_int"]] - expr_df[["max_int"]]) < 2
+      expr_df$group == i 
   }else{
     tmp_vec <- expr_df[["p_val"]] < p_val & expr_df$gene %in% gene_vec &
-    expr_df$group == i & abs(expr_df[["max_int"]] - expr_df[["max_int"]]) < 2
+    expr_df$group == i 
   }
   tmp_mat2 <- expr_df[tmp_vec, 4:18]
   row.names(tmp_mat2) <- expr_df$gene[tmp_vec]
@@ -1077,30 +1077,6 @@ for(i in c("Astro","Oligo","Micro")){
 pdf(paste0("Apr13_SDEG_heatmap_pval.pdf"),width = 6,height = 10)
 plot_list %>% print()
 dev.off()
-
-#Micro
-i = "Micro"
-tmp_vec2 <- c("Cst3","Ctss","Selplg","P2ry12","Kctd12","Lpcat2","Siglech","Gpr34","Sparc","Srrm2","Tgfbr1","Cst7","Ctsb","Apoe","Cd9","Trem2","Myo9a","Lyz2","Clec7a","Gfap","Cd63","Ly6e","Ctsd","Serpinb1b","C1qa")
-#Astro
-i = "Astro"
-tmp_vec2 <- c("Slc1a3","Aldoc","Gpr37l1","Gjb6","Vsnl1","Atp1a3","Nrgn","Gja1","Id4","Cst3","Clu","Gfap","Aqp4","Cd63","Vim","Tmem176b","Stat3","Fxyd1","Cd63")
-#Oligo
-i = "Oligo"
-tmp_vec2 <- c("Pdgfra","Cacng4","Pcdh15","Ccnd1","Serpine2","Plp1","Tspan2","Aplp1","Bin1","Aspa","Trf","Klk6","Mobp","Cldn11","Tubb4a","App","Stmn4","Dnm2","C4b","Cd9","Gfap")
-
-tmp_vec <- expr_df$group == i & expr_df$gene %in% tmp_vec2
-tmp_mat2 <- expr_df[tmp_vec, 9:18]
-row.names(tmp_mat2) <- expr_df$gene[tmp_vec]
-tmp_mat2[,1:5] <- t(scale(t(tmp_mat2[,1:5])))
-tmp_mat2[,6:10] <- t(scale(t(tmp_mat2[,6:10])))
-tmp_mat2 <- tmp_mat2[!is.na(tmp_mat2 %>% rowSums()), ]
-
-plot_list[[paste("13mo",i)]] <- Heatmap(as.matrix(tmp_mat2),
-                                        cluster_columns = F,cluster_rows  = T, show_row_names = T, show_row_dend = F,
-                                        border_gp = gpar(col = "black", lty = 1, lwd = 2),
-                                        rect_gp = gpar(col = "black", lty = 1, lwd = 1),
-                                        row_title = paste("13mo",i)) 
-
 
 ```
 
