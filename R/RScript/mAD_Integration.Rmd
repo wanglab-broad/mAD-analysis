@@ -1,0 +1,179 @@
+---
+title: "mAD Integration"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, warning=FALSE}
+# Load Packages
+library(dplyr)
+library(tidyr)
+library(Seurat)
+library(SeuratDisk)
+library(ggplot2)
+library(cowplot)
+library(patchwork)
+```
+## 1 - Input
+
+```{r}
+# Convert("Data/2020-12-27-starmap-mAD-raw.h5ad", dest = "h5seurat", overwrite = TRUE)
+
+#Load Raw Data
+adata <- LoadH5Seurat("Data/2020-12-27-starmap-mAD-raw.h5seurat", misc=F, meta.data=F)
+adata@meta.data = read.csv("Data/2020-12-27-obs.csv", row.names = 1)
+
+vdata = LoadH5Seurat("Data/2021-03-23-mAD-64-genes-raw.h5seurat")
+```
+## 2 - Preprossing
+
+```{r}
+# Filtration & Normalization
+adata <- NormalizeData(adata, normalization.method = "LogNormalize", scale.factor = median(adata$n_counts))
+adata <- ScaleData(adata)
+adata <- FindVariableFeatures(adata, nfeatures = 2112)
+
+vdata <- NormalizeData(vdata, normalization.method = "LogNormalize", scale.factor = median(vdata$n_counts))
+vdata <- ScaleData(vdata)
+vdata <- FindVariableFeatures(vdata, nfeatures = 64)
+```
+
+```{r}
+integration_features = intersect(VariableFeatures(adata), VariableFeatures(vdata))
+length(integration_features)
+```
+
+## 3 - Integration 
+
+```{r}
+k = 30
+# find anchor
+anchors <- FindTransferAnchors(reference = adata, query = vdata, dims = 1:k, npcs = k, reduction = 'cca', features = integration_features,
+                               k.anchor = 50, k.filter = 50, k.score = 50)
+```
+
+```{r}
+k = 30
+# find anchor
+anchors <- FindTransferAnchors(reference = adata, query = vdata, dims = 1:k, npcs = k, reduction = 'cca', features = integration_features)
+```
+
+```{r}
+k = 30
+# label transfer
+predictions_top_level <- TransferData(anchorset = anchors, refdata = adata$top_level, dims = 1:k, weight.reduction = 'cca')
+predictions_cell_type <- TransferData(anchorset = anchors, refdata = adata$cell_type, dims = 1:k, weight.reduction = 'cca')
+predictions_cell_type_label <- TransferData(anchorset = anchors, refdata = adata$cell_type_label, dims = 1:k, weight.reduction = 'cca')
+
+# expr prediction
+# predictions_expr <- TransferData(anchorset = anchors, refdata = GetAssayData(adata), dims = 1:k, weight.reduction = 'cca')
+
+```
+```{r}
+ggplot(predictions_cell_type_label, aes(x = predicted.id, y = prediction.score.max)) + geom_boxplot(fill = "orange") + theme(axis.text.x = element_text(angle = 45, size = 10, vjust = 0.5))
+```
+
+```{r}
+# vdata <- AddMetaData(vdata, metadata = predictions_top_level)
+vdata@meta.data$predicted_cell_type = predictions_top_level$predicted.id
+vdata@meta.data$predicted_cell_type_score = predictions_top_level$prediction.score.max
+
+ggplot(vdata@meta.data, aes(x = predicted_cell_type, y = predicted_cell_type_score)) + geom_boxplot(fill = "orange") + theme(axis.text.x = element_text(angle = 45, size = 10, vjust = 0.5))
+```
+
+```{r}
+# save predictions
+write.table(predictions_top_level, 
+            'output/anchors_neighbor_200/predicted_top_level.csv', 
+            sep = ',', row.names = T, col.names = T, quote = F)
+
+
+write.table(predictions_cell_type, 
+            'output/anchors_neighbor_200/predicted_cell_type.csv', 
+            sep = ',', row.names = T, col.names = T, quote = F)
+
+write.table(predictions_cell_type_label, 
+            'output/anchors_neighbor_200/predicted_cell_type_label.csv', 
+            sep = ',', row.names = T, col.names = T, quote = F)
+
+```
+
+
+```{r}
+adata <- RunPCA(adata)
+adata <- RunUMAP(adata, dims = 1:30, reduction = "pca", return.model = TRUE)
+vdata <- MapQuery(anchorset = anchors, reference = adata, query = vdata, 
+    refdata = list(top_level = "top_level"), reference.reduction = "pca", reduction.model = "umap")
+
+p1 <- DimPlot(adata, reduction = "umap", group.by = "top_level", label = TRUE, label.size = 3, 
+    repel = TRUE) + NoLegend() + ggtitle("Reference annotations")
+p2 <- DimPlot(vdata, reduction = "ref.umap", group.by = "predicted.cell_type", label = TRUE, 
+    label.size = 3, repel = TRUE) + NoLegend() + ggtitle("Query transferred labels")
+p1 + p2
+```
+
+
+```{r}
+sm_obj <- AddMetaData(sm_obj, metadata = id_predictions)
+
+ggplot(sm_obj@meta.data, aes(x = predicted.id, y = prediction.score.max)) + geom_boxplot(fill = "orange") + theme(axis.text.x = element_text(angle = 45, size = 10, vjust = 0.5))
+```
+
+```{r}
+sum(sm_obj@meta.data$prediction.score.max > 0.5)
+ggplot(sm_obj@meta.data, aes(x = prediction.score.max)) + geom_histogram(fill = "orange")
+```
+
+```{r}
+sm_obj@meta.data %>%
+  group_by(predicted.id) %>%
+  summarise(n_count = sum(prediction.score.max > 0.5))
+```
+```{r}
+sm_obj[['predicted']] = expr_predictions
+
+
+write.table(as.matrix(GetAssayData(object = expr_predictions, slot = "data")), 
+            'C:/Users/jiahao/Data/Placenta_0801/filtered_20/predicted_expr.csv', 
+            sep = ',', row.names = T, col.names = T, quote = F)
+
+```
+
+```{r}
+# save predictions
+write.table(predictions, 
+            'C:/Users/jiahao/Data/Placenta_0801/filtered_20_5000/predicted_cell_type.csv', 
+            sep = ',', row.names = T, col.names = T, quote = F)
+
+
+write.table(id_predictions, 
+            'C:/Users/jiahao/Data/Placenta_0801/filtered_20_5000/predicted_cell_type_id.csv', 
+            sep = ',', row.names = T, col.names = T, quote = F)
+
+```
+
+
+```{r}
+# confusion table
+
+confusion_table <- vdata@meta.data %>%
+  filter(prediction.score.max > 0.5) %>%
+  select(predicted.id, sub_label)
+
+table(confusion_table$predicted.id, confusion_table$sub_label)
+
+confusion_table_sum <- confusion_table %>% 
+  group_by(sub_label, predicted.id) %>%
+  summarise(count = n()) %>%
+  spread(key = predicted.id, value = count) %>% 
+  replace(is.na(.), 0) %>% 
+  gather(key = "predicted.id", value = "count", -sub_label) %>%
+  mutate(Frequency = count/sum(count))
+  
+
+ggplot(confusion_table_sum, aes(x = predicted.id, y = sub_label, fill = Frequency)) + geom_tile(color = "black") + scale_fill_distiller(palette = "Spectral")+ geom_text(aes(label = count), vjust = .5, fontface  = "plain", alpha = 0.8, size = 3) + theme(axis.text.x = element_text(angle = 90))
+```
+

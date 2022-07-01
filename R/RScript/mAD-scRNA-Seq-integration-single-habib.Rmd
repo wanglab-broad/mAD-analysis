@@ -1,0 +1,110 @@
+---
+title: "starmap-habib-integration-single"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, warning=FALSE}
+# Load Packages
+library(dplyr)
+library(tidyr)
+library(Seurat)
+library(SeuratDisk)
+library(ggplot2)
+library(cowplot)
+library(patchwork)
+```
+
+## 1 - Input
+```{r}
+# starmap
+# Load Raw Data (astro)
+expr_star = read.csv('Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-habib/expr_corrected.csv', header = F)
+var_star = read.csv('Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-habib/var.csv')
+obs_star = read.csv('Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-habib/obs.csv', )
+rownames(obs_star) <- obs_star[,1]
+
+# create object
+counts <- t(expr_star)
+colnames(counts) <- obs_star$X
+rownames(counts) <- var_star$X
+counts <- Matrix::Matrix(as.matrix(counts), sparse = T)
+
+adata = CreateSeuratObject(counts, project = 'starmap')
+adata <- AddMetaData(adata, obs_star)
+```
+
+```{r}
+# scrna-seq
+# Load Raw Data (astro)
+expr_habib = read.csv('Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-habib/daa-shared-genes.csv', header = T)
+rownames(expr_habib) <- expr_habib[,1]
+expr_habib[,1] <- NULL
+obs_habib = read.csv('Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-habib/daa-shared-genes-obs.csv', )
+rownames(obs_habib) <- obs_habib[,1]
+
+# create object
+counts <- t(expr_habib)
+counts <- Matrix::Matrix(as.matrix(counts), sparse = T)
+
+hdata = CreateSeuratObject(counts, project = 'habib')
+hdata <- AddMetaData(hdata, obs_habib)
+```
+
+## 2 - Preprossing
+
+```{r}
+# Filtration & Normalization
+# adata <- NormalizeData(adata, normalization.method = "LogNormalize", scale.factor = median(adata$n_counts))
+# adata <- ScaleData(adata)
+adata <- FindVariableFeatures(adata, nfeatures = 2171)
+
+hdata <- NormalizeData(hdata, normalization.method = "LogNormalize", scale.factor = median(hdata$nCount_RNA))
+hdata <- ScaleData(hdata)
+hdata <- FindVariableFeatures(hdata, nfeatures = 2000)
+
+```
+
+```{r}
+integration_features = intersect(VariableFeatures(adata), VariableFeatures(hdata))
+# integration_features = VariableFeatures(adata)
+length(integration_features)
+```
+
+## 3 - Integration 
+
+```{r}
+# find anchor (scRNA-Seq as ref)
+n_pcs = 15
+anchors <- FindTransferAnchors(reference = hdata, query = adata, 
+                               dims = 1:n_pcs, reduction = 'cca', 
+                               features = integration_features, 
+                               k.anchor = 5, k.filter = 200, k.score = 50)
+
+```
+
+```{r}
+# label transfer
+hdata$cluster = as.factor(hdata$cluster)
+predictions_cluster <- TransferData(anchorset = anchors, refdata = hdata$cluster, dims = 1:n_pcs, weight.reduction = 'cca')
+
+adata@meta.data$predicted_habib_cluster = predictions_cluster$predicted.id
+adata@meta.data$predicted_habib_cluster_score = predictions_cluster$prediction.score.max
+
+ggplot(adata@meta.data, aes(x = predicted_habib_cluster, y = predicted_habib_cluster_score)) + geom_boxplot(fill = "orange") + theme(axis.text.x = element_text(angle = 45, size = 10, vjust = 0.5))
+
+# confusion table
+a = table(adata@meta.data$cell_type, adata@meta.data$predicted_habib_cluster)
+a
+```
+
+```{r}
+# save predictions
+write.table(predictions_cluster,
+            "Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-habib/predicted_habib_cluster.csv", 
+            sep = ',', row.names = T, col.names = T, quote = F)
+```
+

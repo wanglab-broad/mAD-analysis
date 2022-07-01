@@ -1,0 +1,172 @@
+---
+title: "starmap-habib-mathys-integration"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, warning=FALSE}
+# Load Packages
+library(dplyr)
+library(tidyr)
+library(Seurat)
+library(SeuratDisk)
+library(ggplot2)
+library(cowplot)
+library(patchwork)
+```
+
+## 1 - Input
+
+```{r}
+# starmap_h5ad_file = 'Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/h5ad/starmap-human-genes-astro.h5ad'
+# starmap_seurat_file = 'Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/h5ad/starmap-human-genes-astro.h5seurat'
+# Convert(starmap_h5ad_file, dest = starmap_seurat_file, overwrite = TRUE)
+
+# starmap_h5ad_file = 'Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/h5ad/starmap-human-genes-clean.h5ad'
+# starmap_seurat_file = 'Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/h5ad/starmap-human-genes-clean.h5seurat'
+# Convert(starmap_h5ad_file, dest = starmap_seurat_file, overwrite = TRUE)
+# 
+# starmap_h5ad_file = 'Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/h5ad/human-complete.h5ad'
+# starmap_seurat_file = 'Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/h5ad/human-complete.h5seurat'
+# Convert(starmap_h5ad_file, dest = starmap_seurat_file, overwrite = TRUE)
+```
+
+```{r}
+# # Load Raw Data
+# starmap_file = 'Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/h5ad/starmap-human-genes-astro.h5seurat'
+# adata <- LoadH5Seurat(starmap_file, misc=F)
+```
+
+```{r}
+# starmap
+# # Load Raw Data (complete)
+# expr_star = read.csv('Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/starmap-human-genes/expr_corrected.csv', header = F)
+# var_star = read.csv('Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/starmap-human-genes/var.csv')
+# obs_star = read.csv('Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/starmap-human-genes/obs.csv')
+
+# Load Raw Data (no hipo ex)
+expr_star = read.csv('Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/starmap-human-genes-nohipoex/expr_corrected.csv', header = F)
+var_star = read.csv('Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/starmap-human-genes-nohipoex/var.csv')
+obs_star = read.csv('Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/starmap-human-genes-nohipoex/obs.csv')
+
+# # Load Raw Data (astro)
+# expr_star = read.csv('Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/starmap-human-genes/expr_corrected.csv', header = F)
+# var_star = read.csv('Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/starmap-human-genes/var.csv')
+# obs_star = read.csv('Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/starmap-human-genes/obs.csv')
+# 
+# # Load Raw Data (micro)
+# expr_star = read.csv('Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/starmap-human-genes/expr_corrected.csv', header = F)
+# var_star = read.csv('Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/starmap-human-genes/var.csv')
+# obs_star = read.csv('Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/starmap-human-genes/obs.csv')
+
+# create object
+counts <- t(expr_star)
+colnames(counts) <- obs_star$X
+rownames(counts) <- var_star$X
+counts <- Matrix::Matrix(as.matrix(counts), sparse = T)
+
+adata = CreateSeuratObject(counts, project = 'starmap')
+adata <- AddMetaData(adata, obs_star)
+```
+
+```{r}
+# scrna-seq
+# Load Raw Data
+expr_sc <- ReadMtx(
+  mtx = "Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/snRNAseqPFC_BA10/filtered_count_matrix.mtx", 
+  features = "Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/snRNAseqPFC_BA10/filtered_gene_row_names.txt",
+  cells = "Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/snRNAseqPFC_BA10/filtered_column_metadata.txt",
+  feature.column = 1,
+  skip.cell = 1,
+)
+
+obs_sc = read.table("Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/snRNAseqPFC_BA10/filtered_column_metadata.txt", header=T)
+
+sdata = CreateSeuratObject(expr_sc, project = 'human')
+rownames(obs_sc) = obs_sc$TAG
+sdata <- AddMetaData(sdata, obs_sc)
+```
+
+## 2 - Preprossing
+
+```{r}
+# Filtration & Normalization
+# adata <- NormalizeData(adata, normalization.method = "LogNormalize", scale.factor = median(adata$n_counts))
+# adata <- ScaleData(adata)
+adata <- FindVariableFeatures(adata, nfeatures = 2701)
+
+sdata <- NormalizeData(sdata, normalization.method = "LogNormalize", scale.factor = median(sdata$nCount_RNA))
+sdata <- ScaleData(sdata)
+sdata <- FindVariableFeatures(sdata, nfeatures = 5000)
+```
+
+```{r}
+integration_features = intersect(VariableFeatures(adata), VariableFeatures(sdata))
+# integration_features = VariableFeatures(adata)
+length(integration_features)
+```
+
+## 3 - Integration 
+
+```{r}
+k = 30
+# find anchor
+anchors <- FindTransferAnchors(reference = sdata, query = adata, 
+                               dims = 1:k, npcs = k, reduction = 'cca', 
+                               features = integration_features, 
+                               k.anchor = 50, k.filter = 50, k.score = 50)
+```
+
+```{r}
+k = 30
+# find anchor
+anchors <- FindTransferAnchors(reference = sdata, query = adata, 
+                               dims = 1:k, npcs = k, reduction = 'cca', 
+                               features = integration_features)
+```
+
+
+```{r}
+k = 30
+# label transfer
+predictions_top_level <- TransferData(anchorset = anchors, refdata = sdata$broad.cell.type, dims = 1:k, weight.reduction = 'cca')
+predictions_sub_level <- TransferData(anchorset = anchors, refdata = sdata$Subcluster, dims = 1:k, weight.reduction = 'cca')
+```
+
+```{r}
+ggplot(predictions_top_level, aes(x = predicted.id, y = prediction.score.max)) + geom_boxplot(fill = "orange") + theme(axis.text.x = element_text(angle = 45, size = 10, vjust = 0.5))
+```
+```{r}
+ggplot(predictions_sub_level, aes(x = predicted.id, y = prediction.score.max)) + geom_boxplot(fill = "orange") + theme(axis.text.x = element_text(angle = 45, size = 10, vjust = 0.5))
+```
+
+
+```{r}
+adata@meta.data$predicted_human_top_level = predictions_top_level$predicted.id
+adata@meta.data$predicted_human_top_level_score = predictions_top_level$prediction.score.max
+
+ggplot(adata@meta.data, aes(x = predicted_human_top_level, y = predicted_human_top_level_score)) + geom_boxplot(fill = "orange") + theme(axis.text.x = element_text(angle = 45, size = 10, vjust = 0.5))
+```
+
+```{r}
+adata@meta.data$predicted_human_sub_level = predictions_sub_level$predicted.id
+adata@meta.data$predicted_human_sub_level_score = predictions_sub_level$prediction.score.max
+
+ggplot(adata@meta.data, aes(x = predicted_human_sub_level, y = predicted_human_sub_level_score)) + geom_boxplot(fill = "orange") + theme(axis.text.x = element_text(angle = 45, size = 10, vjust = 0.5))
+```
+
+```{r}
+# save predictions
+write.table(predictions_top_level,
+            "Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/starmap-human-genes-nohipoex/predicted_human_top_level.csv", 
+            sep = ',', row.names = T, col.names = T, quote = F)
+
+
+write.table(predictions_sub_level, 
+            "Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/starmap-human-genes-nohipoex/predicted_human_sub_level.csv", 
+            sep = ',', row.names = T, col.names = T, quote = F)
+
+```

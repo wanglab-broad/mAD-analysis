@@ -1,0 +1,201 @@
+---
+title: "starmap-habib-mathys-integration-single"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, warning=FALSE}
+# Load Packages
+library(dplyr)
+library(tidyr)
+library(Seurat)
+library(SeuratDisk)
+library(ggplot2)
+library(cowplot)
+library(patchwork)
+```
+
+## 1 - Input
+
+```{r}
+# starmap
+# Load Raw Data (astro)
+expr_star = read.csv('Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/starmap-human-genes-astro/expr_corrected.csv', header = F)
+var_star = read.csv('Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/starmap-human-genes-astro/var.csv')
+obs_star = read.csv('Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/starmap-human-genes-astro/obs.csv', )
+rownames(obs_star) <- obs_star[,1]
+
+# # Load Raw Data (micro)
+# expr_star = read.csv('Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/starmap-human-genes/expr_corrected.csv', header = F)
+# var_star = read.csv('Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/starmap-human-genes/var.csv')
+# obs_star = read.csv('Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/starmap-human-genes/obs.csv')
+
+# create object
+counts <- t(expr_star)
+colnames(counts) <- obs_star$X
+rownames(counts) <- var_star$X
+counts <- Matrix::Matrix(as.matrix(counts), sparse = T)
+
+adata = CreateSeuratObject(counts, project = 'starmap')
+adata <- AddMetaData(adata, obs_star)
+```
+
+```{r}
+# scrna-seq
+# Load Raw Data
+expr_sc <- ReadMtx(
+  mtx = "Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/snRNAseqPFC_BA10/filtered_count_matrix.mtx", 
+  features = "Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/snRNAseqPFC_BA10/filtered_gene_row_names.txt",
+  cells = "Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/snRNAseqPFC_BA10/filtered_column_metadata.txt",
+  feature.column = 1,
+  skip.cell = 1,
+)
+
+obs_sc = read.table("Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/snRNAseqPFC_BA10/filtered_column_metadata.txt", header=T)
+
+sdata = CreateSeuratObject(expr_sc, project = 'human')
+rownames(obs_sc) = obs_sc$TAG
+sdata <- AddMetaData(sdata, obs_sc)
+```
+
+## 2 - Preprossing
+
+```{r}
+# Filtration & Normalization
+# adata <- NormalizeData(adata, normalization.method = "LogNormalize", scale.factor = median(adata$n_counts))
+# adata <- ScaleData(adata)
+adata <- FindVariableFeatures(adata, nfeatures = 2701)
+
+# sdata.sub <- NormalizeData(sdata.sub, normalization.method = "LogNormalize", scale.factor = median(sdata.sub$nCount_RNA))
+# sdata.sub <- ScaleData(sdata.sub)
+# sdata.sub <- FindVariableFeatures(sdata.sub, nfeatures = 2000)
+
+sdata <- NormalizeData(sdata, normalization.method = "LogNormalize", scale.factor = median(sdata$nCount_RNA))
+sdata <- ScaleData(sdata)
+sdata <- FindVariableFeatures(sdata, nfeatures = 2000)
+
+```
+```{r}
+# subset sdata
+sdata.sub <- subset(x = sdata, subset = broad.cell.type == "Ast")
+```
+
+
+```{r}
+# clustering of scRNA-Seq data
+sdata.sub <- RunPCA(sdata.sub, npcs = 30, verbose = FALSE)
+ElbowPlot(sdata.sub)
+```
+
+```{r}
+n_pcs = 4
+sdata.sub <- FindNeighbors(sdata.sub, dims = 1:n_pcs)
+sdata.sub <- FindClusters(sdata.sub, resolution = 1)
+sdata.sub <- RunUMAP(sdata.sub, reduction = "pca", dims = 1:n_pcs, verbose = FALSE)
+```
+
+```{r}
+p1 <- DimPlot(sdata.sub, reduction = "umap", label = TRUE)
+p1
+```
+
+```{r}
+p1 <- DimPlot(sdata.sub, reduction = "umap", label = TRUE, group.by = 'Subcluster')
+p1
+```
+
+
+```{r}
+FeaturePlot(sdata.sub, features = c("GFAP", "VIM", "CD63", "CLU"))
+```
+
+```{r}
+integration_features = intersect(VariableFeatures(adata), VariableFeatures(sdata.sub))
+# integration_features = VariableFeatures(adata)
+length(integration_features)
+```
+
+## 3 - Integration 
+```{r}
+adata@assays$RNA@scale.data = as.matrix(adata@assays$RNA@data)
+data.combined <- RunCCA(sdata.sub, adata, genes.use = integration_features, num.cc = 30, standardize = FALSE, rescale = FALSE)
+```
+
+```{r}
+p1 <- DimPlot(object = data.combined, reduction = "cca", group.by = "orig.ident", pt.size = 0.5)
+p1
+```
+
+```{r}
+data.combined <- RunUMAP(data.combined, reduction = "cca", dims = 1:n_pcs, verbose = FALSE)
+p1 <- DimPlot(data.combined, reduction = "umap", label = FALSE, group.by = 'orig.ident')
+p1
+```
+```{r}
+FeaturePlot(data.combined, features = c("GFAP", "VIM", "CD63", "CLU"))
+```
+
+```{r}
+# find anchor (scRNA-Seq as ref)
+anchors <- FindTransferAnchors(reference = sdata.sub, query = adata, 
+                               dims = 1:n_pcs, reduction = 'cca', 
+                               features = integration_features, 
+                               k.anchor = 5, k.filter = 500, k.score = 50)
+
+
+# label transfer
+predictions_cluster <- TransferData(anchorset = anchors, refdata = sdata.sub$Subcluster, dims = 1:n_pcs, weight.reduction = 'cca')
+
+adata@meta.data$predicted_human_cluster = predictions_cluster$predicted.id
+adata@meta.data$predicted_human_cluster_score = predictions_cluster$prediction.score.max
+
+ggplot(adata@meta.data, aes(x = predicted_human_cluster, y = predicted_human_cluster_score)) + geom_boxplot(fill = "orange") + theme(axis.text.x = element_text(angle = 45, size = 10, vjust = 0.5))
+
+# confusion table
+a = table(adata@meta.data$cell_type, adata@meta.data$predicted_human_cluster)
+a
+```
+
+```{r}
+# save predictions
+write.table(predictions_cluster,
+            "Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/starmap-human-genes-astro/predicted_human_ref_subcluster.csv", 
+            sep = ',', row.names = T, col.names = T, quote = F)
+```
+
+```{r}
+# find anchor (starmap as ref)
+anchors <- FindTransferAnchors(reference = adata, query = sdata.sub, 
+                               dims = 1:n_pcs, reduction = 'cca', 
+                               features = integration_features, 
+                               k.anchor = 50, k.filter = 200, k.score = 50)
+
+# label transfer
+predictions_cluster <- TransferData(anchorset = anchors, refdata = adata$cell_type, dims = 1:n_pcs, weight.reduction = 'cca')
+
+sdata.sub@meta.data$predicted_starmap_cluster = predictions_cluster$predicted.id
+sdata.sub@meta.data$predicted_starmap_cluster_score = predictions_cluster$prediction.score.max
+
+ggplot(sdata.sub@meta.data, aes(x = predicted_starmap_cluster, y = predicted_starmap_cluster_score)) + geom_boxplot(fill = "orange") + theme(axis.text.x = element_text(angle = 45, size = 10, vjust = 0.5))
+
+# confusion table
+a = table(sdata.sub@meta.data$Subcluster, sdata.sub@meta.data$predicted_starmap_cluster)
+a
+```
+
+```{r}
+p1 <- DimPlot(sdata.sub, reduction = "umap", label = TRUE, group.by = 'predicted_starmap_cluster')
+p1
+```
+
+```{r}
+# save predictions
+write.table(predictions_top_level,
+            "Z:/Data/Analyzed/2022-01-03-Hu-AD/other-dataset/starmap-mathys/starmap-human-genes-nohipoex/predicted_human_top_level.csv", 
+            sep = ',', row.names = T, col.names = T, quote = F)
+```
+
+
