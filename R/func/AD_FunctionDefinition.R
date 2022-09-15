@@ -1,4 +1,3 @@
-#####Function Definition: Initialization, plotting and p-Tau analysis#####
 #####Initialize#####
 ad_ini <- function(){
   suppressMessages(require(Seurat))
@@ -11,17 +10,150 @@ ad_ini <- function(){
   suppressMessages(require(ggplot2))
   suppressMessages(require(readr))
   suppressMessages(require(EBImage))
-  suppressMessages(require(tiff))
   suppressMessages(require(ggpubr))
   suppressMessages(require(monocle3))
-  suppressMessages(library(factoextra))
   suppressMessages(library(ComplexHeatmap))
-  suppressMessages(library(umap))
-  print("Initialization Finished")
+  suppressMessages(library(RColorBrewer))
+  suppressMessages(library(circlize))
+  suppressMessages(library(xlsx))
+  message("Initialization Finished")
 }
 
 
-#####General#####  
+
+
+ad_cell_stat <- function(starmap_obj,sample_name,level = "cell_type", only_all = F, raw_count = F){
+  #rm Lhb SMC and combine OPC
+  tmp_cell_meta_filter <- function(cell_meta){
+    cell_meta <- subset(cell_meta, !top_level %in% c("SMC","LHb"))
+    cell_meta[["cell_type"]][cell_meta[["cell_type"]] == "OPC_Gpr17"] <- "OPC"
+    cell_meta
+  }
+  region_vec <- c("all","Cortex","White Matter","Hippocampus")
+  region_alia_vec <- c("All","Cortex","Corpus callosum","Hippocampus")
+  
+  if(only_all){
+    region_vec <- c("all")
+    region_alia_vec <- c("All")
+  }
+  
+  cell_meta_list <- list()
+  for(i in region_vec){
+    cell_meta_list[[i]] <- tmp_cell_meta_filter(starmap_obj@misc[[paste(sample_name,"plaque",i,sep = "_")]][[paste(sample_name,"cell_meta",sep = "_")]])
+  }
+  
+  img_size_list <- c(0,0,0,0)
+  names(img_size_list) <- region_vec
+  for(i in region_vec){
+    tmp <- switch(i,
+                  "all" = 0,"Cortex"=1,"White Matter"=2,"Hippocampus"=3)
+    if(i == "all") img_size_list[[i]] <- sum(starmap_obj@misc[[paste(sample_name,"morph",sep = "_")]][["plaque"]] >= 0)
+    else img_size_list[[i]] <- sum(starmap_obj@misc[[paste(sample_name,"morph",sep = "_")]][["region"]] == tmp)
+  }
+
+  if(level == "cell_type"){
+    tmp_df <- unique(cell_meta_list[["all"]][,c("top_level","cell_type")]) %>% arrange(top_level)
+    res_df <- data.frame(top_level = rep(tmp_df[["top_level"]],each = length(region_vec)),
+                         cell_type = rep(tmp_df[["cell_type"]],each = length(region_vec)),
+                         #cell_type = rep(tmp_df[["cell_type_label"]],each = 4),
+                         region = rep(region_alia_vec, dim(tmp_df)[1] ),
+                         Density_10um = 0, Density_20um = 0, Density_30um = 0, Density_40um = 0, Density_50um = 0, Density_all = 0,
+                         Percentage_10um = 0, Percentage_20um = 0, Percentage_30um = 0, Percentage_40um = 0, Percentage_50um = 0, Percentage_all = 0,
+                         Pvalue_10um = 0,Pvalue_20um = 0,Pvalue_30um = 0,Pvalue_40um = 0,Pvalue_50um = 0)
+  }else if(level == "top_level"){
+    tmp_df <- unique(cell_meta_list[["all"]][,c("top_level")]) %>% sort()
+    res_df <- data.frame(top_level = rep(tmp_df,each = length(region_vec)),
+                         region = rep(region_alia_vec, length(tmp_df) ),
+                         Density_10um = 0, Density_20um = 0, Density_30um = 0, Density_40um = 0, Density_50um = 0, Density_all = 0,
+                         Percentage_10um = 0, Percentage_20um = 0, Percentage_30um = 0, Percentage_40um = 0, Percentage_50um = 0, Percentage_all = 0,
+                         Pvalue_10um = 0,Pvalue_20um = 0,Pvalue_30um = 0,Pvalue_40um = 0,Pvalue_50um = 0)
+  }
+  
+  tmp_cell_stat <- function(x,i,raw = F){
+    region_name <- switch(x[["region"]],
+                          "All" = "all","Cortex" = "Cortex","Corpus callosum" = "White Matter", "Hippocampus" = "Hippocampus")
+    cell_meta <- cell_meta_list[[region_name]]
+    if(i == "all"){
+      region_size <- img_size_list[[region_name]]
+    }else{
+      region_size <- starmap_obj@misc[[paste(sample_name,"plaque",region_name,sep = "_")]][[paste(sample_name,"plaque_dilate_area",sep = "_")]][i] 
+    }
+     
+    if(raw) region_size = 1
+    else region_size = region_size/(3.3^2)
+    if(i == "all"){
+      return(sum(cell_meta[[level]] == x[[level]])/(region_size) )
+    }else{
+      return(sum(cell_meta[[level]] == x[[level]] & cell_meta[["min_border_dist"]] >= 33*(i-1) & cell_meta[["min_border_dist"]] < 33*i
+                   )/(region_size))
+    }
+    
+  }
+  tmp_normalize <- function(vec){vec/sum(vec)}
+  res_df$Density_all <- apply(res_df,1,
+                              FUN = function(x){tmp_cell_stat(x,"all") * 1000000})
+  res_df$Percentage_all <- apply(res_df,1,
+                              FUN = function(x){tmp_cell_stat(x,"all",T)})
+  
+
+  if(level == "top_level" & !raw_count){
+    for(i in region_alia_vec){
+      res_df$Percentage_all[res_df$region == i] <- 100 * tmp_normalize(res_df$Percentage_all[res_df$region == i])
+    }
+  }else if(level == "cell_type" & !raw_count){
+    cell_type_vec <- unique(cell_meta_list[["all"]][,c("top_level")]) %>% sort()
+    for(k in cell_type_vec){
+      for(i in region_alia_vec){
+        res_df$Percentage_all[res_df$region == i & res_df$top_level == k] <- 
+          100 * tmp_normalize(res_df$Percentage_all[res_df$region == i & res_df$top_level == k])
+      }
+    }
+  }
+
+  for(i in c(1:5)){
+    res_df[[paste("Density_",i,"0um",sep = "")]] <- apply(res_df,1,
+                                                          FUN = function(x){tmp_cell_stat(x,i) * 1000000})
+    res_df[[paste("Percentage_",i,"0um",sep = "")]] <- apply(res_df,1,
+                                                          FUN = function(x){tmp_cell_stat(x,i,T)})
+    if(level == "top_level" & !raw_count){
+      for(j in region_alia_vec){
+        res_df[[paste("Percentage_",i,"0um",sep = "")]][res_df$region == j] <- 
+          100 *tmp_normalize(res_df[[paste("Percentage_",i,"0um",sep = "")]][res_df$region == j])
+      }
+    }else if(level == "cell_type" & !raw_count){
+      cell_type_vec <- unique(cell_meta_list[["all"]][,c("top_level")]) %>% sort()
+      for(k in cell_type_vec){
+        for(j in region_alia_vec){
+          res_df[[paste("Percentage_",i,"0um",sep = "")]][res_df$region == j & res_df$top_level == k] <- 
+            100 *tmp_normalize(res_df[[paste("Percentage_",i,"0um",sep = "")]][res_df$region == j & res_df$top_level == k])
+        }
+      }
+    }
+  }
+  for(i in 1:5){
+    res_df[[paste("Pvalue_",i,"0um",sep = "")]] <- apply(res_df,1,
+                                                          FUN = function(x){
+                                                            region_name <- switch(x[["region"]],
+                                                                                  "All" = "all","Cortex" = "Cortex",
+                                                                                  "Corpus callosum" = "White Matter", "Hippocampus" = "Hippocampus")
+                                                            cell_meta <- cell_meta_list[[region_name]]
+                                                            cell_partition_i    <- sum(cell_meta[[level]] == x[[level]] & 
+                                                                                         cell_meta$min_border_dist >= (i-1)*33 &
+                                                                                         cell_meta$min_border_dist <  i*33)
+                                                            cell_partition_all  <- sum(cell_meta[[level]] == x[[level]]) - cell_partition_i
+                                                            other_partition_i   <- sum(cell_meta[[level]] != x[[level]] & 
+                                                                                         cell_meta$min_border_dist >= (i-1)*33 &
+                                                                                         cell_meta$min_border_dist <  i*33)
+                                                            other_partition_all <- sum(cell_meta[[level]] != x[[level]]) - other_partition_i
+                                                            return(chisq.test(matrix(c(cell_partition_i, other_partition_i,
+                                                                                       cell_partition_all, other_partition_all),
+                                                                                     ncol = 2))$p.value)
+                                                          })
+  }
+  return(res_df)
+}
+  
+  
   
 ad_plot_cells <- function (cds, x = 1, y = 2, 
                            reduction_method = c("UMAP", "tSNE", "PCA", "LSI", "Aligned"), 
@@ -437,6 +569,7 @@ ad_s_gene_cl <- function(starmap_obj, cell_meta, sample_name,
   }
   tmp_df[,5] <- rowSums(tmp_mat[,cell_meta$interval %in% c("other","50um")]) / sum(cell_meta$interval %in% c("other","50um"))
   
+  #tmp_df.pca <- prcomp(as.matrix(tmp_df[,1:4]))
   
   #kmeans try
   library(factoextra)
@@ -491,174 +624,15 @@ ad_s_gene_cl <- function(starmap_obj, cell_meta, sample_name,
   return(gene_cl_res)
 }
 
-ad_area <- function(dims_array){dims_array[1]*dims_array[2]}
 
-#####p-Tau#####
-
-ad_tau_grid_analysis <- function(tau_img,cell_meta,sample_name, 
-                                 block_size, palette_list, level = "top_level", 
-                                 plaque_img = NULL, region_img = NULL){
-  plot_list <- list()
-  tmp_img <- Image(tau_img!=0,colormode = Grayscale)
-  tmp_mat <- matrix(0,nrow = floor(dim(tmp_img)[1] / block_size),
-                    ncol = floor(dim(tmp_img)[2] / block_size))
-  for(i in 1:dim(tmp_mat)[1]){
-    for(j in 1:dim(tmp_mat)[2]){
-      tmp_mat[i,j] <- sum(tmp_img[((i-1)*block_size+1):(i*block_size),((j-1)*block_size+1):(j*block_size)])
-    }
-  }
-  require(ComplexHeatmap)
-  require(circlize)
-  plot_list[["tau_heatmap"]] <- Heatmap(tmp_mat,cluster_rows = F,cluster_columns = F,
-                                        col =  colorRamp2(c(0, quantile(tmp_mat,probs = c(0.99))), 
-                                                          c("white", "darkred")))
-  #Cell Idty Stat
-  cell_stat <- data.frame(x = rep(c(1:dim(tmp_mat)[1]), dim(tmp_mat)[2]),
-                          y = rep(c(1:dim(tmp_mat)[2]), each = dim(tmp_mat)[1]))
-  cell_stat[["tau_level"]] <- apply(cell_stat,1,FUN = function(x){tmp_mat[x[["x"]], x[["y"]] ]})
-  for(i in names(palette_list)){
-    cell_stat[[i]] <- apply(cell_stat,1,
-                            FUN = function(x){
-                              sum(cell_meta$x >= (x[["x"]]-1)*block_size+1 &
-                                    cell_meta$x <= x[["x"]]*block_size &
-                                    cell_meta$y >= (x[["y"]]-1)*block_size+1 &
-                                    cell_meta$y <= x[["y"]]*block_size &
-                                    cell_meta[[level]] == i)
-                            })
-    #print(i)
-  }
-  if(!is.null(region_img)){
-    cell_stat[["region"]] <- apply(cell_stat,1,
-                                   FUN = function(x){
-                                     region_img[round((x[["x"]]-1/2)*block_size), round((x[["y"]]-1/2)*block_size)]
-                                   })
-  }
-  require(reshape2)
-  if(!is.null(plaque_img)){
-    cell_stat[["plaque"]] <- apply(cell_stat,1,
-                                   FUN = function(x){
-                                     return(sum(plaque_img[((x[["x"]]-1)*block_size+1):(x[["x"]]*block_size),
-                                                           ((x[["y"]]-1)*block_size+1):(x[["y"]]*block_size)]))
-                                   })
-    tmp_df <- data.frame(tau_interval = c("0%","50%","100%","100%","100%"),
-                         min_tau = c(0,quantile(cell_stat$tau_level[cell_stat$tau_level != 0])[c(1,3,3,3)]),
-                         max_tau = c(quantile(cell_stat$tau_level[cell_stat$tau_level != 0])[c(1,3)],rep(block_size^2,3)),
-                         plaque = c("any","any","any","with_plaque","without_plaque"))
-    for(i in 1:5){
-      for(j in names(palette_list)){
-        if(tmp_df$plaque[i] == "any"){
-          tmp_df[[j]][i] <- sum(cell_stat[[j]][cell_stat$tau_level >= tmp_df$min_tau[i] &
-                                                 cell_stat$tau_level < tmp_df$max_tau[i]])/
-            sum(cell_stat$tau_level >= tmp_df$min_tau[i] & cell_stat$tau_level < tmp_df$max_tau[i])
-        }else if(tmp_df$plaque[i] == "with_plaque"){
-          tmp_df[[j]][i] <- sum(cell_stat[[j]][cell_stat$tau_level >= tmp_df$min_tau[i] &
-                                                 cell_stat$tau_level < tmp_df$max_tau[i] & cell_stat$plaque > 0])/
-            sum(cell_stat$tau_level >= tmp_df$min_tau[i] & cell_stat$tau_level < tmp_df$max_tau[i] & cell_stat$plaque > 0)
-        }else if(tmp_df$plaque[i] == "without_plaque"){
-          tmp_df[[j]][i] <- sum(cell_stat[[j]][cell_stat$tau_level >= tmp_df$min_tau[i] &
-                                                 cell_stat$tau_level < tmp_df$max_tau[i] & cell_stat$plaque == 0])/
-            sum(cell_stat$tau_level >= tmp_df$min_tau[i] & cell_stat$tau_level < tmp_df$max_tau[i] & cell_stat$plaque == 0)
-        }
-      }
-    }
-    tmp_df_bk <- tmp_df 
-    tmp_df <- tmp_df %>% melt(id.vars = c("tau_interval","min_tau","max_tau","plaque"))
-    tmp_df$tau_interval <- factor(tmp_df$tau_interval, levels = c("0%","50%","100%"))
-    tmp_df$variable <- factor(tmp_df$variable, levels = names(palette_list))
-    tmp_df[["title"]] <- factor(paste(tmp_df$tau_interval,tmp_df$plaque,sep = "_"),
-                                levels = c("0%_any","50%_any","100%_any","100%_with_plaque","100%_without_plaque"))
-    
-    plot_list[["stacked_barplot"]] <-
-      ggplot(data = tmp_df,aes(x = title, y = value, fill = variable, order = variable))+
-      geom_bar(stat="identity") + 
-      ggtitle(paste(sample_name,"Cell Density in Tau Free blocks and 0-25%/.../75-100% quantile blocks with tau")) +
-      scale_fill_manual("",values = palette_list,
-                        breaks = names(palette_list),
-                        labels = names(palette_list)) +
-      theme_classic()
-    
-  }else{
-    #Ridge Barplot
-    tmp_df <- data.frame(tau_interval = c("0%","50%","100%"),
-                         #min_tau = c(0,1,10,29,68),
-                         #max_tau = c(1,10,29,68,999),
-                         min_tau = c(0,quantile(cell_stat$tau_level[cell_stat$tau_level != 0])[c(1,3)]),
-                         max_tau = c(quantile(cell_stat$tau_level[cell_stat$tau_level != 0])[c(1,3)],block_size^2))
-    
-    for(i in 1:3){
-      for(j in names(palette_list)){
-        tmp_df[[j]][i] <- sum(cell_stat[[j]][cell_stat$tau_level >= tmp_df$min_tau[i] &
-                                               cell_stat$tau_level < tmp_df$max_tau[i]])/
-          sum(cell_stat$tau_level >= tmp_df$min_tau[i] & cell_stat$tau_level < tmp_df$max_tau[i])
-      }
-      
-    }
-    tmp_df_bk <- tmp_df 
-    tmp_df <- tmp_df %>% melt(id.vars = c("tau_interval","min_tau","max_tau"))
-    tmp_df$tau_interval <- factor(tmp_df$tau_interval, levels = c("0%","50%","100%"))
-    tmp_df$variable <- factor(tmp_df$variable, levels = names(palette_list))
-    
-    plot_list[["stacked_barplot"]] <-
-      ggplot(data = tmp_df,aes(x = tau_interval, y = value, fill = variable, order = variable))+
-      geom_bar(stat="identity") + 
-      ggtitle(paste(sample_name,"Cell Density in Tau Free blocks and 0-25%/.../75-100% quantile blocks with tau")) +
-      scale_fill_manual("",values = palette_list,
-                        breaks = names(palette_list),
-                        labels = names(palette_list)) +
-      theme_classic()
-  }
-  cell_stat[["tau_group"]] <- apply(cell_stat,1,
-                                    FUN = function(x){
-                                      tau_level <- as.numeric(x[["tau_level"]])
-                                      plaque_level <- as.numeric(x[["plaque"]])
-                                      
-                                      tmp_vec <- quantile(cell_stat$tau_level[cell_stat$tau_level != 0], 
-                                                          probs = c(0,0.5,1))
-                                      if(tau_level < tmp_vec[1]) "Zero"
-                                      else if(tau_level < tmp_vec[2]) "Low"
-                                      else if(tau_level >= tmp_vec[2] & plaque_level == 0) "High w/o ABeta"
-                                      else if(tau_level >= tmp_vec[2] & plaque_level > 0) "High w ABeta"
-                                      else "NA"
-                                    })
   
   
-  return(list("plot_list" = plot_list,
-              "cell_stat" = cell_stat,
-              "interval_stat" = tmp_df,
-              "interval_stat_wide" = tmp_df_bk))
-}
+  
+  
+  
 
-ad_tau_stat <- function(cell_stat, cell_type_vec){
-  tmp_df <- data.frame(cell_type = cell_type_vec)
-  for(i in c("Low","High","High w ABeta","High w/o ABeta")){
-    tmp_df[[i]] <- apply(tmp_df,1,
-                         FUN = function(x){
-                           if(i == "High") tmp_vec <- cell_stat[[x[["cell_type"]]]][cell_stat$tau_group %in% c("High w ABeta", "High w/o ABeta")]
-                           else tmp_vec <- cell_stat[[x[["cell_type"]]]][cell_stat$tau_group == i]
-                           tmp_obj <- t.test(x = tmp_vec,
-                                             y = cell_stat[[x[["cell_type"]]]][cell_stat$tau_group == "Zero"],
-                                             alternative = "greater")
-                           tmp_obj$p.value
-                         })
-  }
-  tmp_df
-}
 
-ad_combined_tau_density <- function(palette_list,stat_1,stat_2,title_text = ""){
-  tmp_df <- data.frame(cell_type = stat_1$variable,
-                       title = stat_1$title,
-                       sample1 = stat_1$value,
-                       sample2 = stat_2$value)
-  tmp_df$average <- (tmp_df$sample1+tmp_df$sample2)/2
-  tmp_df <- tmp_df %>% subset(subset = cell_type != "DG")
-  palette_list <- palette_list[names(palette_list) != "DG"]
-  tmp_df$title <- factor(tmp_df$title,levels = c("0%_any","50%_any","100%_any","100%_with_plaque","100%_without_plaque"))
-  p <-
-    ggplot(data = tmp_df,aes(x = title, y = average, fill = cell_type, order = cell_type))+
-    geom_bar(stat="identity") + 
-    ggtitle(paste("p-Tau Cell Density",title_text)) +
-    scale_fill_manual("",values = palette_list ,
-                      breaks = names(palette_list),
-                      labels = names(palette_list)) +
-    theme_classic()
-}
+
+
+
+

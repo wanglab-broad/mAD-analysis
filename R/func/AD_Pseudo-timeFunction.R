@@ -165,10 +165,10 @@ ad_psdtime_highlight <- function(meta_df, highlight_col, cds = NULL, show_trajec
     if(highlight_col == "sample"){
       if(i == "all"){
         g <- g + geom_point(data = meta_df, shape = 16, 
-                            aes(x = UMAP1, y = UMAP2, colour = pseudotime),alpha = 0.4, size = 3)
+                            aes(x = UMAP1, y = UMAP2, colour = pseudotime),alpha = 0.8, size = 1.5)
       }else{
         g <- g + geom_point(data = meta_df[meta_df[[highlight_col]] == i,], shape = 16, 
-                            aes(x = UMAP1, y = UMAP2, colour = pseudotime),alpha = 0.4, size = 3)
+                            aes(x = UMAP1, y = UMAP2, colour = pseudotime),alpha = 0.8, size = 1.5)
       }
       g <- g + scale_color_gradientn(colours = c("#7703fc", "#8403fc", "#be03fc", "#fc6b03", "#fceb03"),
                                      values = c(0, 0.2, 0.4, 0.6, 0.8, 1))
@@ -177,10 +177,10 @@ ad_psdtime_highlight <- function(meta_df, highlight_col, cds = NULL, show_trajec
       
       if(i == "all"){
         g <- g + geom_point(data = meta_df, shape = 16, 
-                            aes(x = UMAP1, y = UMAP2, color = cell_type),alpha = 0.4, size = 3)
+                            aes(x = UMAP1, y = UMAP2, color = cell_type),alpha = 0.8, size = 1.5)
       }else{
         g <- g + geom_point(data = meta_df[meta_df[[highlight_col]] == i,], shape = 16, 
-                            aes(x = UMAP1, y = UMAP2, color = cell_type),alpha = 0.4, size = 3)
+                            aes(x = UMAP1, y = UMAP2, color = cell_type),alpha = 0.8, size = 1.5)
       }
       g <- g + scale_color_manual(values = tmp_col)
     }
