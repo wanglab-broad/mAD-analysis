@@ -1,0 +1,2 @@
+run("Subtract Background...", "rolling=5");
+run("Gaussian Blur...", "sigma=2");

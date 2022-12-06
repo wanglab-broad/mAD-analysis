@@ -1,0 +1,2 @@
+setAutoThreshold("MaxEntropy dark");
+run("Convert to Mask");
