@@ -39,3 +39,5 @@ vignettes/*.pdf
 .Renviron
 .DS_Store
 *log*
+
+.ipynb_checkpoints/
